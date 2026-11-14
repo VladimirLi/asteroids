@@ -2,16 +2,17 @@
 // look at the screen, tap, drag to aim, adjust, release. Game time only advances while a command
 // runs, so a slow tester sees the game the way a person watching in real time would.
 //
-//   node tools/playtest/server.cjs <port> [width] [height]      (serve www/ on :8765 first)
+//   node tools/playtest/server.cjs <port> [width] [height]
 //   node tools/playtest/pt.cjs <port> <command> [args]           (see pt.cjs for commands)
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
+const { serveFile } = require("../static.cjs");
 
 const port = Number(process.argv[2] || 9101);
 let W = Number(process.argv[3] || 360), H = Number(process.argv[4] || 760);
-const URL_ = process.env.GAME_URL || "http://127.0.0.1:8765/";
+const URL_ = process.env.GAME_URL || `http://127.0.0.1:${port}/game/`;
 const outDir = process.env.PT_OUT || path.join("/tmp", "playtest-" + port);
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -145,6 +146,7 @@ const commands = {
 };
 
 http.createServer(async (req, res) => {
+  if (req.url.startsWith("/game/")) return serveFile(req, res, "/game");
   const [cmd, ...args] = decodeURIComponent(req.url.slice(1)).split("/");
   try {
     if (!commands[cmd]) throw new Error("unknown command " + cmd + ". commands: " + Object.keys(commands).join(", "));

@@ -2,11 +2,13 @@
 // then a Daily Orbit and a Free Orbit hole. Each shot is found by searching the game's own physics
 // at the exact moment of play, so it exercises story cards, briefings, results, unlocks and saves.
 //
-//   python3 -m http.server 8765 --directory www &   then   node tools/playthrough.cjs
+//   node tools/playthrough.cjs
 const { chromium, devices } = require("playwright");
-const URL = process.env.URL || "http://127.0.0.1:8765/";
+const { start } = require("./static.cjs");
 
 (async () => {
+  const web = await start();
+  const URL = process.env.URL || web.url;
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ ...devices["Pixel 7"] });
   const page = await ctx.newPage();
@@ -113,4 +115,5 @@ const URL = process.env.URL || "http://127.0.0.1:8765/";
   console.log(`played ${results.length} holes, ${failed.length} failed`);
   process.exitCode = failed.length || errors.length ? 1 : 0;
   await browser.close();
+  web.close();
 })();
