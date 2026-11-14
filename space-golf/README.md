@@ -11,6 +11,14 @@ Open `index.html` in a browser, on desktop or phone. No build step is needed.
 - **Reset ball** (or `R`) during a shot gives up on that shot for a 1-stroke penalty.
 - On a portrait phone the course rotates so the tee sits at the bottom.
 
+### Phone support
+
+Tested with real touch input on Android screen sizes from 320 px wide up to a Pixel 7, in portrait and landscape:
+
+- If your finger smears a few pixels as you lift it, the shot fires from where your finger had settled, not where it slid.
+- Pull-to-refresh, page scrolling and the long-press menu are blocked while you play, and the screen stays awake where the browser allows.
+- On short landscape screens the hint bar is hidden so the course gets the full height. The briefing card before each hole carries the same information.
+
 ## The holes
 
 Each hole introduces one mechanic. Its briefing card explains it, and the bodies are labelled the first time they appear.

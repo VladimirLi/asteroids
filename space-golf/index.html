@@ -23,7 +23,7 @@
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   color-scheme: dark;
 }
-html, body { height: 100%; margin: 0; }
+html, body { height: 100%; margin: 0; overscroll-behavior: none; }
 [hidden] { display: none !important; }
 body {
   background: var(--void);
@@ -34,6 +34,7 @@ body {
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 #stage { position: fixed; inset: 0; touch-action: none; display: block; }
 button {
@@ -46,10 +47,11 @@ button {
   cursor: pointer;
   touch-action: manipulation;
 }
-button:hover { background: rgba(255, 255, 255, 0.12); }
+@media (hover: hover) { button:hover { background: rgba(255, 255, 255, 0.12); } button.primary:hover { background: #ffd877; } }
+button:active { background: rgba(255, 255, 255, 0.16); }
+button:disabled { opacity: 0.4; cursor: default; }
 button:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
 button.primary { background: var(--flag); color: #1a1405; border-color: var(--flag); font-weight: 600; }
-button.primary:hover { background: #ffd877; }
 
 .hud {
   position: fixed;
@@ -130,6 +132,14 @@ button.primary:hover { background: #ffd877; }
   #holeName { font-size: 17px; }
   .buttons button { padding: 7px 9px; font-size: 12px; }
   #hint { font-size: 12px; }
+}
+@media (max-height: 500px) {
+  #bottom { display: none; }
+  #top { padding-top: calc(env(safe-area-inset-top, 0px) + 6px); }
+  #holeName { font-size: 16px; }
+  #strokes { font-size: 15px; }
+  .card { padding: 14px; gap: 8px; }
+  .card h2 { font-size: 22px; }
 }
 @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
 </style>
@@ -524,7 +534,7 @@ function launchState(level, rest, t, vx, vy) {
   }
   function fitView() {
     const topPad = $("top").offsetHeight + 8;
-    const botPad = $("bottom").offsetHeight + 8;
+    const botPad = ($("bottom").offsetHeight || 0) + 8;
     const availW = W - 24, availH = Math.max(100, H - topPad - botPad);
     const portrait = availH > availW * 1.05;
     view.rot = portrait ? -Math.PI / 2 : 0;
@@ -637,6 +647,8 @@ function launchState(level, rest, t, vx, vy) {
   $("btnHoles").onclick = openMenu;
   $("mClose").onclick = () => { $("menu").hidden = true; };
 
+  const btnReset = $("btnReset");
+  btnReset.disabled = true;
   $("btnReset").onclick = () => {
     if (mode === "fly") { penalty("Ball reset +1"); }
   };
@@ -702,17 +714,31 @@ function launchState(level, rest, t, vx, vy) {
   }
 
   canvas.addEventListener("pointerdown", (e) => {
-    if (mode !== "aim") return;
-    canvas.setPointerCapture(e.pointerId);
-    aim = { sx: e.clientX, sy: e.clientY, cx: e.clientX, cy: e.clientY, id: e.pointerId };
+    if (mode !== "aim" || aim) return;
+    e.preventDefault();
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    aim = { sx: e.clientX, sy: e.clientY, cx: e.clientX, cy: e.clientY, id: e.pointerId, hist: [] };
   });
   canvas.addEventListener("pointermove", (e) => {
     if (!aim || e.pointerId !== aim.id) return;
     aim.cx = e.clientX; aim.cy = e.clientY;
+    aim.hist.push({ x: e.clientX, y: e.clientY, t: performance.now() });
+    if (aim.hist.length > 40) aim.hist.shift();
   });
-  const end = (e) => { if (aim && e.pointerId === aim.id) shoot(); };
+  // Lifting a finger smears it a few pixels, which throws a short drag off-line.
+  // If the last ~70 ms moved only a little, shoot from where the finger had settled.
+  function settleAim() {
+    const now = performance.now();
+    let pick = null;
+    for (let k = aim.hist.length - 1; k >= 0; k--) {
+      if (now - aim.hist[k].t >= 70) { pick = aim.hist[k]; break; }
+    }
+    if (pick && Math.hypot(pick.x - aim.cx, pick.y - aim.cy) < 14) { aim.cx = pick.x; aim.cy = pick.y; }
+  }
+  const end = (e) => { if (aim && e.pointerId === aim.id) { settleAim(); shoot(); } };
   canvas.addEventListener("pointerup", end);
   canvas.addEventListener("pointercancel", () => { aim = null; preview = []; });
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
   // ---------- loop ----------
   let last = performance.now(), acc = 0;
@@ -738,6 +764,8 @@ function launchState(level, rest, t, vx, vy) {
       }
     } else acc = 0;
     if (aim) computePreview();
+    const canReset = mode === "fly";
+    if (btnReset.disabled === canReset) btnReset.disabled = !canReset;
     draw();
     requestAnimationFrame(frame);
   }
@@ -1090,7 +1118,18 @@ function launchState(level, rest, t, vx, vy) {
     }
   }
 
+  let wakeLock = null;
+  async function keepAwake() {
+    try { if (!wakeLock && navigator.wakeLock && document.visibilityState === "visible") { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => (wakeLock = null)); } } catch (err) {}
+  }
+  document.addEventListener("visibilitychange", keepAwake);
+  $("bPlay").addEventListener("click", keepAwake);
+
+  // read-only hook for automated tests
+  window.__perihelion = { w2s, get level() { return level; }, get mode() { return mode; }, get strokes() { return strokes; }, get ball() { return ball ? { x: ball.x, y: ball.y } : restPos(level, rest, simTime); } };
+
   window.addEventListener("resize", resize);
+  window.addEventListener("orientationchange", () => setTimeout(resize, 150));
   resize();
   loadLevel(0);
   requestAnimationFrame(frame);
