@@ -1,0 +1,21 @@
+{
+  "name": "perihelion-golf",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "solve": "node tools/solve.mjs",
+    "solve:quick": "node tools/solve.mjs --quick"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/syne": "^5.3.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/haptics": "^8.0.2"
+  }
+}

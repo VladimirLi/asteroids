@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#070b1a">
+<title>Perihelion Golf</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<!-- ============ TITLE ============ -->
+<section class="screen" id="scr-title" hidden>
+  <div class="title-wrap">
+    <div class="logo">
+      <span class="logo-eyebrow">The Perihelion Links</span>
+      <h1>Perihelion<br>Golf</h1>
+      <p class="tagline">Golf across a dying star system.</p>
+    </div>
+    <div class="menu">
+      <button class="primary big" id="tPlay">Play</button>
+      <button class="big" id="tChapters">Chapters</button>
+      <div class="menu-row">
+        <button id="tDaily"><span class="lbl">Daily Orbit</span><span class="sub" id="tDailySub">New hole today</span></button>
+        <button id="tFree"><span class="lbl">Free Orbit</span><span class="sub">Endless random holes</span></button>
+      </div>
+      <div class="menu-row small">
+        <button id="tLog">Logbook</button>
+        <button id="tSettings">Settings</button>
+      </div>
+    </div>
+    <div class="progress" id="tProgress"></div>
+  </div>
+</section>
+
+<!-- ============ CHAPTERS ============ -->
+<section class="screen" id="scr-chapters" hidden>
+  <header class="bar"><button class="icon" data-back aria-label="Back">‹</button><h2>Chapters</h2><span class="stars-total" id="cStars"></span></header>
+  <div class="scroll"><div class="chapter-list" id="chapterList"></div></div>
+</section>
+
+<!-- ============ HOLES ============ -->
+<section class="screen" id="scr-holes" hidden>
+  <header class="bar"><button class="icon" data-back aria-label="Back">‹</button><div class="bar-title"><span class="eyebrow" id="hPlace"></span><h2 id="hChapter"></h2></div><span class="stars-total" id="hStars"></span></header>
+  <div class="scroll"><div class="hole-grid" id="holeGrid"></div></div>
+</section>
+
+<!-- ============ GAME HUD ============ -->
+<section class="screen game" id="scr-game" hidden>
+  <div class="hud" id="hud">
+    <button class="icon" id="gPause" aria-label="Pause">❚❚</button>
+    <div class="hud-title"><span class="eyebrow" id="gNum"></span><span id="gName"></span></div>
+    <div class="hud-score"><span class="eyebrow">Strokes / Par</span><span id="gStrokes"></span></div>
+  </div>
+  <div class="hud-bottom" id="hudBottom">
+    <div id="gHint" class="hint"></div>
+  </div>
+  <button class="reset-ball" id="gReset" hidden>Give up shot (+1)</button>
+  <div id="toast" class="toast"></div>
+</section>
+
+<!-- ============ OVERLAYS ============ -->
+<div class="overlay" id="ov-story" hidden>
+  <div class="card story-card">
+    <span class="meta" id="sSpeaker"></span>
+    <h2 id="sTitle"></h2>
+    <p id="sText" class="story-text"></p>
+    <div class="actions"><span class="dots" id="sDots"></span><button class="primary" id="sNext">Continue</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-brief" hidden>
+  <div class="card">
+    <span class="meta" id="bMeta"></span>
+    <h2 id="bTitle"></h2>
+    <p id="bText"></p>
+    <div class="legend" id="bLegend"><canvas id="bIcon" width="56" height="56"></canvas><p id="bLegendText"></p></div>
+    <div class="best" id="bBest"></div>
+    <div class="actions"><button class="primary" id="bPlay">Tee off</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-result" hidden>
+  <div class="card result-card">
+    <span class="meta" id="rMeta"></span>
+    <div class="star-row" id="rStars"><span>★</span><span>★</span><span>★</span></div>
+    <h2 id="rTitle"></h2>
+    <p id="rText"></p>
+    <p class="quip" id="rQuip"></p>
+    <div class="actions">
+      <button id="rMenu">Holes</button>
+      <button id="rRetry">Replay</button>
+      <button class="primary" id="rNext">Next hole</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-pause" hidden>
+  <div class="card">
+    <span class="meta">Paused</span>
+    <h2 id="pTitle"></h2>
+    <div class="stack">
+      <button class="primary" id="pResume">Resume</button>
+      <button id="pRestart">Restart hole</button>
+      <button id="pSettings">Settings</button>
+      <button id="pQuit">Leave hole</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-settings" hidden>
+  <div class="card">
+    <span class="meta">Settings</span>
+    <h2>Settings</h2>
+    <label class="setting"><span>Music</span><input type="range" id="setMusic" min="0" max="1" step="0.05"></label>
+    <label class="setting"><span>Sound effects</span><input type="range" id="setSfx" min="0" max="1" step="0.05"></label>
+    <label class="setting toggle"><span>Vibration</span><input type="checkbox" id="setHaptics"></label>
+    <div class="stack">
+      <button id="setCredits">Credits</button>
+      <button id="setReset" class="danger">Reset progress</button>
+    </div>
+    <div class="actions"><button class="primary" data-close>Done</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-log" hidden>
+  <div class="card">
+    <span class="meta" id="lMeta"></span>
+    <h2>Logbook</h2>
+    <div class="stats" id="lStats"></div>
+    <div class="ach-list" id="lList"></div>
+    <div class="actions"><button class="primary" data-close>Close</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-confirm" hidden>
+  <div class="card">
+    <h2 id="cfTitle"></h2>
+    <p id="cfText"></p>
+    <div class="actions"><button id="cfNo">Cancel</button><button class="danger" id="cfYes">Confirm</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-credits" hidden>
+  <div class="card">
+    <span class="meta">Credits</span>
+    <h2>Perihelion Golf</h2>
+    <p>Design, code, levels, music and sound: made for this game. All music and sound effects are synthesized live on your device.</p>
+    <p>Typefaces: Syne and IBM Plex Mono, both under the SIL Open Font License.</p>
+    <p>No ads. No tracking. Your progress is stored only on this device.</p>
+    <div class="actions"><button class="primary" data-close>Close</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-loading" hidden>
+  <div class="card center">
+    <div class="spinner"></div>
+    <p id="ldText">Charting today's orbit…</p>
+  </div>
+</div>
+
+<div class="ach-toast" id="achToast" hidden><span class="eyebrow">Logbook entry</span><b id="achName"></b></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

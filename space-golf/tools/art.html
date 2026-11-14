@@ -1,0 +1,72 @@
+<!DOCTYPE html><html><body style="margin:0;background:#000">
+<canvas id="c"></canvas>
+<script>
+// Brand art for icons, splash and store graphics. Drawn procedurally so it can be regenerated at any size.
+function sun(g, cx, cy, r, glowMul = 3) {
+  const gl = g.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * glowMul);
+  gl.addColorStop(0, "rgba(255,200,90,0.55)"); gl.addColorStop(0.4, "rgba(255,150,60,0.16)"); gl.addColorStop(1, "rgba(255,140,60,0)");
+  g.fillStyle = gl; g.beginPath(); g.arc(cx, cy, r * glowMul, 0, 7); g.fill();
+  const core = g.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.05, cx, cy, r);
+  core.addColorStop(0, "#fff6d8"); core.addColorStop(0.5, "#ffc94d"); core.addColorStop(1, "#e0772f");
+  g.fillStyle = core; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill();
+}
+function bg(g, w, h, hue = 228) {
+  const gr = g.createRadialGradient(w * 0.35, h * 0.3, 0, w * 0.5, h * 0.5, Math.max(w, h) * 0.8);
+  gr.addColorStop(0, `hsl(${hue},48%,17%)`); gr.addColorStop(1, `hsl(${hue + 12},55%,5%)`);
+  g.fillStyle = gr; g.fillRect(0, 0, w, h);
+}
+function stars(g, w, h, n, seed = 7) {
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < n; i++) { g.fillStyle = `rgba(220,230,255,${0.15 + rnd() * 0.6})`; g.beginPath(); g.arc(rnd() * w, rnd() * h, rnd() < 0.1 ? 1.6 : 0.8, 0, 7); g.fill(); }
+}
+// The mark: a sun with a golf ball arcing around it into a gold cup ring.
+function mark(g, cx, cy, s) {
+  sun(g, cx - s * 0.08, cy + s * 0.05, s * 0.2, 2.4);
+  g.strokeStyle = "rgba(111,224,210,0.9)"; g.lineWidth = s * 0.035; g.lineCap = "round";
+  g.setLineDash([s * 0.001, s * 0.075]);
+  g.beginPath(); g.ellipse(cx - s * 0.04, cy + s * 0.02, s * 0.38, s * 0.24, -0.45, Math.PI * 0.95, Math.PI * 2.32); g.stroke();
+  g.setLineDash([]);
+  // cup + flag
+  const hx = cx + s * 0.27, hy = cy - s * 0.25;
+  g.fillStyle = "#05070f"; g.beginPath(); g.ellipse(hx, hy, s * 0.085, s * 0.05, 0, 0, 7); g.fill();
+  g.strokeStyle = "#ffc94d"; g.lineWidth = s * 0.022; g.beginPath(); g.ellipse(hx, hy, s * 0.085, s * 0.05, 0, 0, 7); g.stroke();
+  g.strokeStyle = "#eef2fb"; g.lineWidth = s * 0.016; g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx, hy - s * 0.3); g.stroke();
+  g.fillStyle = "#ffc94d"; g.beginPath(); g.moveTo(hx, hy - s * 0.3); g.lineTo(hx + s * 0.16, hy - s * 0.25); g.lineTo(hx, hy - s * 0.2); g.fill();
+  // ball
+  const bx = cx - s * 0.36, by = cy + s * 0.22, br = s * 0.055;
+  const bg2 = g.createRadialGradient(bx - br * 0.3, by - br * 0.3, br * 0.1, bx, by, br);
+  bg2.addColorStop(0, "#fff"); bg2.addColorStop(1, "#aab6cf");
+  g.fillStyle = bg2; g.beginPath(); g.arc(bx, by, br, 0, 7); g.fill();
+}
+async function render(kind, w, h) {
+  await document.fonts.load("800 80px Syne");
+  const c = document.getElementById("c"); c.width = w; c.height = h;
+  const g = c.getContext("2d");
+  g.clearRect(0, 0, w, h);
+  if (kind === "icon") { bg(g, w, h); stars(g, w, h, 40); mark(g, w * 0.5, h * 0.56, w * 0.8); }
+  if (kind === "foreground") { mark(g, w / 2, h / 2, w * 0.62); }   // adaptive icon: content inside the 66/108 safe zone
+  if (kind === "background") { bg(g, w, h); stars(g, w, h, 50); }
+  if (kind === "splash") { bg(g, w, h); stars(g, w, h, Math.round(w * h / 9000)); mark(g, w / 2, h / 2, Math.min(w, h) * 0.38); }
+  if (kind === "feature") {
+    bg(g, w, h, 232); stars(g, w, h, 160);
+    sun(g, w * 0.84, h * 0.5, h * 0.18, 3.2);
+    g.strokeStyle = "rgba(180,195,240,0.18)"; g.setLineDash([4, 9]); g.lineWidth = 2;
+    for (const k of [1.9, 2.7]) { g.beginPath(); g.ellipse(w * 0.84, h * 0.5, h * 0.2 * k, h * 0.2 * k * 0.42, 0, 0, 7); g.stroke(); }
+    g.setLineDash([]);
+    g.fillStyle = "#5b8def"; g.beginPath(); g.arc(w * 0.84 - h * 0.33, h * 0.5 + h * 0.07, h * 0.04, 0, 7); g.fill();
+    g.fillStyle = "#e0905a"; g.beginPath(); g.arc(w * 0.84 + h * 0.15, h * 0.5 - h * 0.17, h * 0.035, 0, 7); g.fill();
+    g.fillStyle = "#ffc94d"; g.font = "600 22px 'IBM Plex Mono', monospace"; g.textBaseline = "alphabetic";
+    g.fillText("THE PERIHELION LINKS", 70, 170);
+    const tg = g.createLinearGradient(0, 180, 0, 330); tg.addColorStop(0.3, "#ffffff"); tg.addColorStop(1, "#ffd98a");
+    g.fillStyle = tg; g.font = "800 80px Syne"; g.fillText("Perihelion", 64, 262); g.fillText("Golf", 64, 340);
+    g.fillStyle = "#aab4d4"; g.font = "400 24px 'IBM Plex Mono', monospace"; g.fillText("Golf across a dying star system.", 70, 400);
+  }
+  return c.toDataURL("image/png");
+}
+</script>
+<style>
+@font-face { font-family: "Syne"; font-weight: 800; src: url(../www/fonts/syne-latin-800-normal.woff2); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; src: url(../www/fonts/ibm-plex-mono-latin-400-normal.woff2); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 600; src: url(../www/fonts/ibm-plex-mono-latin-600-normal.woff2); }
+</style>
+</body></html>

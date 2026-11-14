@@ -1,49 +1,77 @@
-# Perihelion Golf (prototype)
+# Perihelion Golf
 
-Golf in space. Each body in the course has its own kind of gravity, and you have to bend your shots through them to reach the cup.
+Space mini-golf for Android. You bend shots around planets, black holes, wormholes and pulsars to relight the cups of a golf course built across a dying star system.
 
-## Play
+- 36 handcrafted holes in 4 chapters, each verified by a solver to be holeable in one
+- Story told by ORRERY, the course's caretaker computer
+- Daily Orbit (one generated hole per day, the same for everyone) and endless Free Orbit
+- Stars, best scores, 17 logbook achievements, daily streaks
+- Music and sound effects synthesized live with Web Audio (no audio files)
+- Fully offline: no ads, no tracking, no network requests
 
-Open `index.html` in a browser, on desktop or phone. No build step is needed.
+## Project layout
 
-- **Shoot:** drag anywhere, pull back like a slingshot, and release. A longer pull means more power.
-- **Preview:** the dotted line shows where the first second or two of the shot will go, gravity included. A gold ring at its end means the shot goes in, teal means you land on a body, and red means you lose the ball.
-- **Reset ball** (or `R`) during a shot gives up on that shot for a 1-stroke penalty.
-- On a portrait phone the course rotates so the tee sits at the bottom.
+```
+www/                  the game (plain ES modules, no build step)
+  js/core.js          deterministic physics, shared by game, daily generator and tools
+  js/levels/chN.js    hole data, one file per chapter
+  js/main.js          screens, story flow, progression, input, game loop
+  js/render.js        canvas renderer and effects
+  js/audio.js         procedural music, sound effects, haptics
+  js/daily.js         Daily / Free Orbit generator with on-device validation
+  js/save.js          local save data
+  js/story.js         all story text
+android/              Capacitor 8 Android project (target SDK 36)
+tools/                solver, playthrough test, asset and screenshot generators
+store/                Play Store listing, privacy policy, icon, feature graphic, screenshots
+```
 
-### Phone support
+## Run it in a browser
 
-Tested with real touch input on Android screen sizes from 320 px wide up to a Pixel 7, in portrait and landscape:
+```
+cd www && python3 -m http.server 8765
+```
+Open http://localhost:8765. Phone-sized windows play best.
 
-- If your finger smears a few pixels as you lift it, the shot fires from where your finger had settled, not where it slid.
-- Pull-to-refresh, page scrolling and the long-press menu are blocked while you play, and the screen stays awake where the browser allows.
-- On short landscape screens the hint bar is hidden so the course gets the full height. The briefing card before each hole carries the same information.
+## Check the levels
 
-## The holes
+```
+npm install
+node tools/solve.mjs            # every hole; or: c2, c3h4, --quick
+```
+Every hole must print `ok`: completable within par, and 3 stars (par − 1 strokes) verified possible. `tools/LEVEL_DESIGN.md` is the guide for adding holes.
 
-Each hole introduces one mechanic. Its briefing card explains it, and the bodies are labelled the first time they appear.
+Full UI playthrough of all 36 holes plus Daily and Free Orbit (needs Playwright and the server above):
+```
+node tools/playthrough.cjs
+```
 
-| # | Hole | Teaches |
-|---|------|---------|
-| 1 | Tee Off | Aiming, power, and the cup only catching slow balls (the green slows you down) |
-| 2 | Bent Path | Planets pull, so shots curve |
-| 3 | Slingshot | Whipping around a planet to reach a hidden cup |
-| 4 | Stepping Stones | Landing on planets and playing your next shot from there |
-| 5 | Event Horizon | Black holes swallow the ball (+1 penalty), and a near miss gives a speed boost |
-| 6 | Push Back | Repulsor stars push instead of pull and work as bumpers |
-| 7 | Nebula | Gas clouds have no gravity but brake the ball |
-| 8 | Wormhole | Linked wormholes keep your speed and heading, and are the way into a walled-off cup |
-| 9 | Moon Dance | Moving bodies, so you have to time the shot |
-| 10 | Pulsar | Gravity that switches on and off |
-| 11 | Grand Tour | Everything combined |
+## Build for Android
 
-## Rules
+You need the Android SDK (platform 36) and JDK 17 or newer, or Android Studio.
 
-- Each launch is one stroke. Black hole, leaving the course, or orbiting for 15 s: +1 stroke, and you play again from where that shot started.
-- Touching a planet or moon slowly lands you on it. Hitting it fast bounces you off.
+```
+npm install
+npx cap sync android
+cd android && ./gradlew assembleDebug        # test build: android/app/build/outputs/apk/debug/app-debug.apk
+```
 
-## Tuning and the solver
+### Release for Google Play
+```
+tools/build-release.sh
+```
+On the first run this creates your **upload key** (`android/upload-key.jks` plus `android/keystore.properties`). Back both up somewhere safe, and never commit them (they are git-ignored). The script then builds `android/app/build/outputs/bundle/release/app-release.aab`, which is the file you upload to Play Console.
 
-All physics and level data sit between `// CORE-BEGIN` and `// CORE-END` in `index.html`. Tuning constants are in `PHYS`, and the holes are in `LEVELS`.
+Before the first upload:
+1. Decide the app ID. It is `com.periheliongolf.app` in `capacitor.config.json` and `android/app/build.gradle`, and it can never change after the first upload.
+2. Fill in your support email in `store/privacy-policy.html` and host that page publicly (GitHub Pages works).
+3. Follow `store/listing.md` for the store text, graphics and App content answers.
+4. Google requires new personal developer accounts to run a closed test with at least 12 testers for 14 days before production access. Start that early.
 
-`node tools/solve.js [hole]` runs the same physics headlessly. It brute-forces every angle and power (and launch timings for moving holes) to confirm each hole can be completed, and reports roughly how forgiving it is.
+For each update, raise `versionCode` and `versionName` in `android/app/build.gradle`.
+
+### Regenerating art
+`tools/art.html` draws the icon, adaptive icon layers, splash screens and feature graphic. To render them: serve the project root on port 8766, then run `node tools/make-assets.cjs`. To capture new store screenshots, serve `www/` on 8765 and run `node tools/store-shots.cjs`.
+
+## Credits
+Typefaces: Syne and IBM Plex Mono (SIL Open Font License, bundled in `www/fonts`).
