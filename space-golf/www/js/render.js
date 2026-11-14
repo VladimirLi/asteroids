@@ -217,19 +217,26 @@ export class Renderer {
     this.cup(st);
     this.teeMark(px);
 
-    this.trail(st.ghost, "rgba(160,170,200,0.14)", px, 1.5);
+    if (st.ghostGold) { ctx.setLineDash([10 * px, 7 * px]); this.trail(st.ghost, "rgba(255,201,77,0.75)", px, 2.2); ctx.setLineDash([]); }
+    else this.trail(st.ghost, st.aiming ? "rgba(160,170,200,0.10)" : "rgba(160,170,200,0.22)", px, 1.5);
+    if (st.nearMark) {
+      const m = st.nearMark; ctx.strokeStyle = "rgba(255,120,110,0.9)"; ctx.lineWidth = 2 * px;
+      ctx.beginPath(); ctx.arc(m.x, m.y, 7 * px, 0, 6.283); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(this.level.hole.x, this.level.hole.y); ctx.setLineDash([3 * px, 4 * px]); ctx.stroke(); ctx.setLineDash([]);
+    }
     if (st.extraTrails) for (const tr of st.extraTrails) this.glowTrail(tr, st.skin, px, 0.55);
-    this.glowTrail(st.trail, st.skin, px, 1);
+    this.glowTrail(st.trail, st.skin, px, st.aiming ? 0.35 : 1);
 
     // preview
     const pv = st.preview;
     if (pv && pv.pts.length) {
-      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      const goesIn = pv.hit && pv.hit.ev === "holed";
+      ctx.fillStyle = goesIn ? "rgba(255,210,90,1)" : "rgba(255,255,255,0.95)";
       const n = pv.pts.length / 2;
       const march = reduceMotion() ? 0 : (t * 6) % 1;
       for (let k = 0; k < n; k++) {
         const pulse = 0.75 + 0.25 * Math.cos((k / 3 - t * 3) * Math.PI);
-        ctx.globalAlpha = (1 - k / (n + 4)) * pulse;
+        ctx.globalAlpha = Math.max(0.45, 1 - k / (n + 4)) * pulse;
         ctx.beginPath(); ctx.arc(pv.pts[2 * k], pv.pts[2 * k + 1], (2.2 + 0.6 * pulse) * px, 0, 6.283); ctx.fill();
       }
       void march;
@@ -238,7 +245,10 @@ export class Renderer {
         const c = { holed: "#ffc94d", rest: "#6fe0d2" }[pv.hit.ev] || "#ff6b6b";
         ctx.strokeStyle = c; ctx.lineWidth = 2.5 * px;
         ctx.beginPath(); ctx.arc(pv.hit.x, pv.hit.y, 10 * px, 0, 6.283); ctx.stroke();
-        if (pv.hit.ev === "holed") { ctx.beginPath(); ctx.arc(pv.hit.x, pv.hit.y, 16 * px, 0, 6.283); ctx.stroke(); }
+        if (goesIn) {
+          const h = this.level.hole, pr = PHYS.greenR * (0.75 + 0.25 * Math.sin(t * 8));
+          ctx.lineWidth = 4 * px; ctx.beginPath(); ctx.arc(h.x, h.y, pr, 0, 6.283); ctx.stroke();
+        }
       }
     }
 
@@ -278,8 +288,14 @@ export class Renderer {
 
     // screen-space overlays
     this.screenTransform();
-    this.labels(W);
+    if (st.labelAlpha > 0.01) { ctx.globalAlpha = st.labelAlpha; this.labels(W); ctx.globalAlpha = 1; }
     this.pulsarTimers(W, t);
+    if (pv && pv.hit && pv.hit.ev === "holed") {
+      const s2 = this.w2s(this.level.hole.x, this.level.hole.y);
+      ctx.font = "800 18px Syne, sans-serif"; ctx.textAlign = "center";
+      ctx.lineWidth = 4; ctx.strokeStyle = "rgba(6,9,22,0.9)"; ctx.strokeText("GOES IN", s2.x, s2.y + 48);
+      ctx.fillStyle = "#ffc94d"; ctx.fillText("GOES IN", s2.x, s2.y + 48);
+    }
     this.flag(st);
     if (st.aim) this.gauge(st.aim, bp);
     for (const c of this.callouts) {
@@ -331,12 +347,12 @@ export class Renderer {
       ctx.lineWidth = w * px;
       for (let i = 0; i < n - 1; i += seg) {
         const j = Math.min(n - 1, i + seg);
-        if (arr[j * 3 + 2] === 1) continue;
         const fade = 0.35 + 0.65 * (i / n);
         const c = rainbow ? hslRGB((i * 6) % 360) : col;
         ctx.strokeStyle = `rgba(${c},${a * fade * alpha})`;
         ctx.beginPath(); ctx.moveTo(arr[i * 3], arr[i * 3 + 1]);
-        for (let k = i + 1; k <= j; k++) ctx.lineTo(arr[k * 3], arr[k * 3 + 1]);
+        // a flagged point is a wormhole exit: lift the pen so no line crosses the map
+        for (let k = i + 1; k <= j; k++) arr[k * 3 + 2] === 1 ? ctx.moveTo(arr[k * 3], arr[k * 3 + 1]) : ctx.lineTo(arr[k * 3], arr[k * 3 + 1]);
         ctx.stroke();
       }
     }

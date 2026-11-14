@@ -257,3 +257,22 @@ button.icon { width: 44px; height: 44px; padding: 0; font-size: 22px; line-heigh
   #gName { font-size: 15px; }
 }
 @media (max-width: 340px) { #gName { font-size: 12.5px; } .hud button.icon { width: 34px; height: 34px; min-height: 34px; } }
+
+/* ---------- v1.2: playtest round 1 ---------- */
+:root { --panel: rgba(13, 19, 42, 0.965); }
+.toast { top: auto; bottom: calc(var(--safe-b) + 122px); font-size: 16px; white-space: normal; text-align: center; max-width: min(88vw, 420px); width: max-content; z-index: 30; }
+.ach-toast { top: auto; bottom: calc(var(--safe-b) + 176px); z-index: 30; }
+.show-line { right: auto; left: max(16px, var(--safe-l)); color: var(--gold); border-color: rgba(255, 201, 77, 0.5); }
+.screen.game .hud { background: linear-gradient(180deg, rgba(7, 11, 26, 0.92) 55%, rgba(7, 11, 26, 0)); margin: calc(-1 * var(--safe-t) - 12px) calc(-1 * max(16px, var(--safe-r))) 0 calc(-1 * max(16px, var(--safe-l))); padding: calc(var(--safe-t) + 12px) max(16px, var(--safe-r)) 18px max(16px, var(--safe-l)); }
+.actions.sticky { position: sticky; bottom: -20px; padding: 10px 0 20px; margin-bottom: -20px; background: linear-gradient(180deg, rgba(13, 19, 42, 0), rgba(13, 19, 42, 1) 35%); }
+.setting > span { flex: 0 0 120px; }
+.setting input[type=range] { max-width: none; }
+.hole-tile .nm { font-size: 10.5px; }
+.bar h2 { font-size: clamp(18px, 5.6vw, 24px); }
+.bar .eyebrow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.best { line-height: 1.5; }
+/* Portrait: dialogs sit at thumb height so the main button is always in the same place. */
+@media (max-aspect-ratio: 1/1) {
+  #ov-brief, #ov-result, #ov-pause, #ov-story { align-items: flex-end; padding-bottom: calc(var(--safe-b) + 28px); }
+}
+@media (max-height: 520px) { .toast { bottom: calc(var(--safe-b) + 64px); } .ach-toast { bottom: calc(var(--safe-b) + 112px); } }

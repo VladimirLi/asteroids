@@ -38,13 +38,18 @@ export const save = {
   finishHole(id, strokes, par) {
     const stars = strokes <= par - 1 ? 3 : strokes <= par ? 2 : 1;
     const prev = data.holes[id];
-    const rec = { best: prev ? Math.min(prev.best, strokes) : strokes, stars: Math.max(prev ? prev.stars : 0, stars) };
+    const had = prev && prev.best > 0;
+    const rec = { best: had ? Math.min(prev.best, strokes) : strokes, stars: Math.max(prev ? prev.stars : 0, stars) };
     data.holes[id] = rec;
     persist();
-    return { stars, newBest: !prev || strokes < prev.best, prevStars: prev ? prev.stars : 0 };
+    return { stars, newBest: !had || strokes < prev.best, prevStars: prev ? prev.stars : 0 };
+  },
+  // Skipping opens the next hole but earns nothing.
+  skipHole(id) {
+    if (!data.holes[id]) { data.holes[id] = { best: 0, stars: 0, skipped: true }; persist(); }
   },
   totalStars() { return Object.values(data.holes).reduce((a, h) => a + h.stars, 0); },
-  holesDone() { return Object.keys(data.holes).length; },
+  holesDone() { return Object.values(data.holes).filter((h) => h.stars > 0).length; },
   finishDaily(dateKey, strokes, yesterdayKey) {
     const prev = data.daily[dateKey];
     data.daily[dateKey] = prev ? Math.min(prev, strokes) : strokes;

@@ -8,12 +8,12 @@ export const PHYS = {
   restitution: 0.42,
   friction: 0.7,
   maxSpeed: 620,      // launch speed at full power
-  captureSpeed: 210,  // the cup only catches balls slower than this
-  holeR: 20,
+  captureSpeed: 250,  // the cup only catches balls slower than this
+  holeR: 22,
   holeMu: 60000,
-  greenR: 64,         // soft braking zone around every cup
-  greenDrag: 2.2,
-  maxFlight: 15,      // seconds before a ball is declared lost in orbit
+  greenR: 78,         // soft braking zone around every cup
+  greenDrag: 2.6,
+  maxFlight: 11,      // seconds before a ball is declared lost in orbit
   margin: 260,        // how far outside the course before the ball is lost
   soft: 10,
   worldW: 1400,
@@ -140,12 +140,11 @@ export function step(world, s, t, dt = PHYS.dt) {
       continue;
     }
     if (b.type === "wormhole") {
-      if (s.cool <= 0 && dx * dx + dy * dy < b.r * b.r) {
+      if (s.cool <= 0 && dx * dx + dy * dy < (b.r + 5) * (b.r + 5)) {
         const j = b.link;
         const sp = Math.hypot(s.vx, s.vy) || 1;
         s.x = X[j] + (s.vx / sp) * (B[j].r + 4);
         s.y = Y[j] + (s.vy / sp) * (B[j].r + 4);
-        s.vx += world.vx[j] - world.vx[i]; s.vy += world.vy[j] - world.vy[i];
         s.cool = 0.4;
         s.events.push("warp");
       }

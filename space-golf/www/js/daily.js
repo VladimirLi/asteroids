@@ -58,7 +58,7 @@ export function generate(seed, label) {
     const r = Math.round(between(80, 110));
     if (clear(mid.x, mid.y, r + 40)) {
       solids.push({ ...mid, r: r + 40 });
-      const period = +between(5, 8).toFixed(1), ph = +between(0, 3.14).toFixed(2);
+      const period = +between(8, 11).toFixed(1), ph = +between(0, 3.14).toFixed(2);
       for (const off of [0, Math.PI]) bodies.push({ type: "star", r: 28, mu: 1.8e6, color: off ? "#ff8a5c" : "#ffb347", orbit: { cx: Math.round(mid.x), cy: Math.round(mid.y), r, period, phase: +(ph + off).toFixed(2) } });
     }
   } else {
@@ -101,10 +101,17 @@ export async function dailyHole(label, onProgress) {
   for (let k = 0; k < 40; k++) {
     const lvl = generate((base + k * 7919) >>> 0, label);
     if (lvl.bodies.length < 2) continue;
-    const aces = await findAces(lvl, { angStep: 2, powers: 12, onChunk: () => new Promise((r) => setTimeout(r, 0)) });
+    const yieldNow = () => new Promise((r) => setTimeout(r, 0));
+    const aces = await findAces(lvl, { angStep: 2, powers: 12, onChunk: yieldNow });
     if (onProgress) onProgress(k);
     const rate = aces.length / (180 * 12);
-    if (aces.length >= 3 && rate < 0.03) { lvl.aceCount = aces.length; return lvl; }
+    if (aces.length < 4 || rate > 0.05) continue;
+    // Moving holes must be fair whenever you shoot, not only at one lucky moment.
+    if (lvl.bodies.some((b) => b.orbit || b.pulse)) {
+      const later = await findAces(lvl, { angStep: 3, powers: 10, t0: 2.7, onChunk: yieldNow });
+      if (later.length < 3) continue;
+    }
+    lvl.aceCount = aces.length; return lvl;
   }
   // Fallback that is always fair.
   return { id: "daily-" + label, name: "Calm Orbit", par: 3, w: 1400, h: 900, preview: 1.5, hint: "A quiet day in the Links.", tee: { x: 200, y: 450 }, hole: { x: 1200, y: 450 },

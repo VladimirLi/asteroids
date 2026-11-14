@@ -1,5 +1,5 @@
 // Perihelion Golf — app shell: screens, story, progression, input and the game loop.
-import { PHYS, World, step, restPos, launch, pulsePhase } from "./core.js";
+import { PHYS, World, step, restPos, launch, pulsePhase, simulate } from "./core.js";
 import { CHAPTERS } from "./levels/index.js";
 import { Renderer, drawIcon, shade } from "./render.js";
 import { save } from "./save.js";
@@ -19,7 +19,7 @@ const FREE_SKY = { hue: 250, accent: "#c9a6ff" };
 
 // ---------------------------------------------------------------- achievements
 const ACH = [
-  { id: "first_cup", name: "First Light", desc: "Sink your first ball." },
+  { id: "first_cup", name: "First Cup", desc: "Sink your first ball." },
   { id: "ace", name: "Hole in One", desc: "Hole out with a single stroke." },
   { id: "ace10", name: "Sharpshooter", desc: "Make 10 holes in one." },
   { id: "c1", name: "Inner Links", desc: "Finish chapter 1." },
@@ -81,6 +81,7 @@ function show(scr) {
   A.playMusic(scr === "game" && game ? game.music : "title");
 }
 function openOv(id) {
+  if (game) { game.aim = null; game.preview = null; }   // never fire a shot from behind a dialog
   if (!overlays.includes(id)) overlays.push(id);
   $("ov-" + id).hidden = false;
   const btn = $("ov-" + id).querySelector(".primary");
@@ -110,7 +111,7 @@ function goBack() {
   A.sfx("back");
   const top = topOv();
   if (top === "loading") return;
-  if (top === "story") { $("sNext").click(); return; }
+  if (top === "story") { storyCancel ? storyCancel() : $("sNext").click(); return; }
   if (top === "confirm") { $("cfNo").click(); return; }
   if (top === "brief") { closeOv("brief"); leaveGame(); return; }
   if (top === "result") { $("rMenu").click(); return; }
@@ -128,8 +129,10 @@ window.addEventListener("keydown", (e) => {
 window.Capacitor?.Plugins?.App?.addListener?.("backButton", goBack);
 
 // ---------------------------------------------------------------- story cards
-function story(title, pages, onDone) {
+let storyCancel = null;
+function story(title, pages, onDone, cancellable) {
   let i = 0;
+  storyCancel = cancellable ? () => { closeOv("story"); storyCancel = null; } : null;
   $("sSpeaker").textContent = SPEAKER;
   $("sTitle").textContent = title;
   const render = () => {
@@ -140,7 +143,7 @@ function story(title, pages, onDone) {
   $("sNext").onclick = () => {
     A.sfx("page");
     if (++i < pages.length) render();
-    else { closeOv("story"); onDone && onDone(); }
+    else { closeOv("story"); storyCancel = null; onDone && onDone(); }
   };
   render();
   openOv("story");
@@ -170,13 +173,13 @@ function renderTitle() {
   const mid = new Date(); mid.setHours(24, 0, 0, 0);
   const left = Math.max(0, mid - new Date()), hh = Math.floor(left / 3.6e6), mm = Math.floor((left % 3.6e6) / 6e4);
   $("tDailySub").textContent = today ? `Done in ${today} · next in ${hh}h ${mm}m` : save.data.streak && save.data.lastDaily === yesterdayKey() ? `Keep your ${save.data.streak}-day streak` : "A new hole today";
-  $("tLockerDot").hidden = save.seen("skins:" + unlockedSkinIds().join(","));
+  $("tLockerDot").hidden = unlockedSkinIds().length <= 1 || save.seen("skins:" + unlockedSkinIds().join(","));
 }
 $("tPlay").onclick = () => {
   const nh = nextHole();
   if (!nh) { show("chapters"); return; }
   if (!save.seen("prologue")) {
-    story("The Perihelion Links", PROLOGUE, () => { save.markSeen("prologue"); startHole(nh.ci, nh.hi); });
+    story("The Perihelion Links", PROLOGUE, () => { save.markSeen("prologue"); startHole(nh.ci, nh.hi); }, true);
     return;
   }
   startHole(nh.ci, nh.hi);
@@ -301,7 +304,7 @@ function renderHoles() {
     const isNext = nh && nh.ci === viewChapter && nh.hi === hi;
     b.className = "hole-tile" + (open ? "" : " locked") + (isNext ? " next" : "");
     const stars = [0, 1, 2].map((k) => `<span class="${rec && rec.stars > k ? "" : "off"}">★</span>`).join("");
-    b.innerHTML = `${rec && rec.best === 1 ? '<span class="ace">ACE</span>' : ""}<span class="n">${hi + 1}</span><span class="nm">${open ? h.name : "Locked"}<br>Par ${h.par}${rec ? ` · best ${rec.best}` : ""}</span><span class="st">${stars}</span>`;
+    b.innerHTML = `${rec && rec.best === 1 ? '<span class="ace">ACE</span>' : ""}<span class="n">${hi + 1}</span><span class="nm">${open ? h.name : "Locked"}<br>${rec && rec.best ? `Best ${rec.best} · par ${h.par}` : rec ? "Skipped" : `Par ${h.par}`}</span><span class="st">${stars}</span>`;
     b.onclick = () => { if (!open) { toastMsg("Finish the hole before it", "bad"); return; } startHole(viewChapter, hi); };
     grid.appendChild(b);
   });
@@ -315,8 +318,7 @@ function startHole(ci, hi) {
   const begin = () => loadGame({ kind: "campaign", level: ch.holes[hi], ci, hi, sky: ch.sky, music: ch.id });
   viewChapter = ci;
   if (CHAPTER_STORY[ch.id] && !save.seen("open-" + ch.id)) {
-    show("title");
-    story(`Chapter ${ci + 1} · ${ch.name}`, CHAPTER_STORY[ch.id].open, () => { save.markSeen("open-" + ch.id); begin(); });
+    story(`Chapter ${ci + 1} · ${ch.name}`, CHAPTER_STORY[ch.id].open, () => { save.markSeen("open-" + ch.id); begin(); }, true);
   } else begin();
 }
 
@@ -346,13 +348,17 @@ function loadGame(opts) {
     trail: [], ghost: game && game.level === L ? game.lastTrail || game.trail : [], lastTrail: null,
     aim: null, preview: null, penalized: false, shotStats: null, pulseOn: [],
     allTrails: [], fates: [], tags: new Set(), timeScale: 1, slowTarget: 1, zoomTarget: 1,
-    skin: currentSkin(save), tutorial: opts.kind === "campaign" && opts.ci === 0 && opts.hi === 0 && !save.seen("tutorial"),
+    misses: 0, demo: false, nearMark: null,
+    previewLen: L.previewLen || (opts.kind !== "campaign" ? 950 : opts.ci === 0 ? (opts.hi < 5 ? 2600 : 1300) : [0, 1050, 950, 900][opts.ci]),
+    skin: currentSkin(save), tutorial: !save.seen("tutorial"),
   };
   show("game");
   R.setLevel(L, opts.sky);
   $("gName").textContent = L.name;
   $("gNum").textContent = opts.kind === "campaign" ? `Ch ${opts.ci + 1} · Hole ${opts.hi + 1}/${CHAPTERS[opts.ci].holes.length}`
-    : opts.kind === "daily" ? `Daily Orbit · ${opts.dateKey}` : "Free Orbit";
+    : opts.kind === "daily" ? `Daily · ${new Date(opts.dateKey + "T12:00:00").toLocaleDateString("en", { month: "short", day: "numeric" })}` : "Free Orbit";
+  $("toast").className = "toast"; $("toast").textContent = "";
+  $("gShow").hidden = true; btnReset.hidden = true;
   $("gHint").innerHTML = L.hint || "";
   $("gHint").hidden = !L.hint;
   updateStrokes();
@@ -371,13 +377,15 @@ function showBrief() {
   $("bMeta").textContent = `${$("gNum").textContent} · Par ${L.par}`;
   $("bTitle").textContent = L.name;
   const intro = L.intro;
-  $("bText").innerHTML = intro ? intro.text : (L.hint || "");
-  $("bLegend").hidden = !intro || !intro.legend;
+  const newbie = !save.seen("tutorial") && !intro;      // first shot ever is in Daily / Free Orbit
+  $("bText").innerHTML = intro ? intro.text : newbie ? "Drag anywhere and pull back, like a slingshot. Let go to launch. The dotted line shows where the ball will go." : (L.hint || "");
+  $("bLegend").hidden = !(intro && intro.legend) && !newbie;
   if (intro && intro.legend) { drawIcon($("bIcon"), intro.legend[0]); $("bLegendText").textContent = intro.legend[1]; }
+  else if (newbie) { drawIcon($("bIcon"), "cup"); $("bLegendText").textContent = "The cup only catches a slow ball. When the dotted line turns gold, the shot goes in."; }
   let best = "";
   if (rec) best = `Your best: <b>${rec.best}</b> · ${"★".repeat(rec.stars)}${"☆".repeat(3 - rec.stars)}`;
   else if (game.kind === "daily" && save.data.daily[game.dateKey]) best = `Today's best: <b>${save.data.daily[game.dateKey]}</b>`;
-  else best = `3 stars: ${L.par - 1} stroke${L.par - 1 === 1 ? "" : "s"} or fewer. 2 stars: par.`;
+  if (!rec || game.kind !== "campaign") best += `${best ? "<br>" : ""}★★★ ${L.par - 1 === 1 ? "hole in one" : `${L.par - 1} strokes or fewer`} · ★★ ${L.par} strokes`;
   $("bBest").innerHTML = best;
   openOv("brief");
 }
@@ -386,6 +394,7 @@ $("bPlay").onclick = () => { closeOv("brief"); game.mode = "aim"; };
 function pause() {
   if (!game || overlays.length) return;
   $("pTitle").textContent = game.level.name;
+  $("pSkip").hidden = !(game.kind === "campaign" && !(save.hole(game.level.id)?.stars));
   openOv("pause");
 }
 function resume() { closeOv("pause"); }
@@ -398,7 +407,14 @@ $("gRetry").onclick = () => {
   toastMsg("Fresh start", "");
 };
 $("pResume").onclick = resume;
-$("pRestart").onclick = () => { closeOv("pause"); loadGame({ ...game, ghost: game.trail }); };
+$("pRestart").onclick = () => { closeOv("pause"); $("gRetry").click(); };
+$("pSkip").onclick = () => {
+  const g = game; closeOv("pause");
+  save.skipHole(g.level.id);
+  const ch = CHAPTERS[g.ci];
+  if (g.hi < ch.holes.length - 1) startHole(g.ci, g.hi + 1);
+  else { viewChapter = g.ci; show(g.ci + 1 < CHAPTERS.length ? "chapters" : "holes"); }
+};
 $("pQuit").onclick = () => { closeOv("pause"); leaveGame(); };
 function leaveGame() {
   const g = game;
@@ -408,12 +424,13 @@ function leaveGame() {
 // ---------------------------------------------------------------- shooting
 const btnReset = $("gReset");
 btnReset.onclick = giveUpShot;
-function giveUpShot() { if (game && game.mode === "fly") penalty("Shot abandoned +1", "orbit"); }
+$("gShow").onclick = showLine;
+function giveUpShot() { if (game && game.mode === "fly" && !game.demo) miss("Ball recalled", "orbit"); }
 
 function aimVelocity(aim) {
   const dx = aim.sx - aim.cx, dy = aim.sy - aim.cy, len = Math.hypot(dx, dy);
   if (len < 12) return null;
-  const full = Math.min(R.W, R.H) * 0.42;
+  const full = Math.min(R.W, R.H) * 0.5;
   const power = Math.min(1, len / full);
   const v = R.screenVecToWorld(dx / len, dy / len);
   return { vx: v.x * power * PHYS.maxSpeed, vy: v.y * power * PHYS.maxSpeed, power };
@@ -424,41 +441,51 @@ function computePreview() {
   game.aim.power = lv ? lv.power : 0;
   if (!lv) { game.preview = null; return; }
   const s = launch(game.world, game.rest, game.t, lv.vx, lv.vy);
-  const steps = Math.round((game.level.preview || 1.3) / PHYS.dt);
+  // The preview covers a fixed distance, not a fixed time, so gentle shots are not left blind.
   const pts = [];
-  let t = game.t, hit = null;
-  for (let k = 0; k < steps; k++) {
+  let t = game.t, hit = null, dist = 0, acc2 = 0, px = s.x, py = s.y;
+  for (let k = 0; k < 720 && dist < game.previewLen; k++) {
     t += PHYS.dt;
     const ev = step(game.world, s, t);
-    if (k % 4 === 0) pts.push(s.x, s.y);
+    const warped = s.events.length && s.events.includes("warp");
     s.events.length = 0;
+    if (!warped) { const d = Math.hypot(s.x - px, s.y - py); dist += d; acc2 += d; }
+    px = s.x; py = s.y;
+    if (acc2 >= 15 || warped) { pts.push(s.x, s.y); acc2 = 0; }
     if (ev) { hit = { ev, x: s.x, y: s.y }; break; }
   }
   game.world.at(game.t);
   game.preview = { pts, hit };
 }
 
-function shoot(lv) {
+function shoot(lv, demo = false) {
   game.aim = null; game.preview = null;
-  if (!lv) return;
+  if (!lv || overlays.length) return;
   game.ball = launch(game.world, game.rest, game.t, lv.vx, lv.vy);
   game.from = game.rest;
-  game.strokes++; updateStrokes();
+  game.demo = demo; game.nearMark = null; game.near = { d: Infinity, x: 0, y: 0 };
+  $("gShow").hidden = true;
+  if (!demo) { game.strokes++; updateStrokes(); }
   game.lastTrail = game.trail.length ? game.trail : game.lastTrail;
   game.trail = [];
   game.mode = "fly";
   game.flyTime = 0;
   game.shotStats = { bounces: 0, maxSpeed: 0, launchSpeed: Math.hypot(lv.vx, lv.vy), graze: {}, inCloud: false, cloudBrake: false, asteroid: false, bumper: false, warped: false, sparkT: 0 };
   if (game.tutorial) { game.tutorial = false; save.markSeen("tutorial"); }
-  save.count("shots");
+  if (!demo) save.count("shots");
   A.sfx("launch", { power: lv.power }); A.haptic("light");
   const p = restPos(game.world, game.from, game.t);
   R.burst(p.x, p.y, { n: 10, speed: 90, color: "200,230,255", life: 0.5, vx: -lv.vx * 0.2, vy: -lv.vy * 0.2 });
 }
 
-function penalty(msg, kind) {
-  game.strokes++; updateStrokes();
-  game.penalized = true;
+// A miss costs only the stroke already played; the ball comes back to where the shot started.
+// Only black holes add a penalty stroke.
+function miss(msg, kind) { penalty(msg, kind, false); }
+function penalty(msg, kind, extra = true) {
+  if (extra) { game.strokes++; updateStrokes(); game.penalized = true; }
+  game.misses++;
+  if (game.near && game.near.d < 400 && kind !== "swallowed") game.nearMark = { x: game.near.x, y: game.near.y };
+  if (game.misses >= 3) $("gShow").hidden = false;
   toastMsg(msg, "bad");
   A.sfx(kind === "swallowed" ? "swallowed" : kind === "orbit" ? "orbit" : "lost");
   A.haptic(kind === "swallowed" ? "heavy" : "error");
@@ -521,7 +548,7 @@ function handleShotEvents(ball) {
       game.shotStats.warped = true;
       R.ring(ball.x, ball.y, { color: "120,220,255", max: 70, life: 0.5 });
     } else if (ev === "lip") {
-      A.sfx("lip"); toastMsg("Lipped out: too fast", "bad");
+      A.sfx("lip"); game.shotStats.lipped = true;
     }
   }
   ball.events.length = 0;
@@ -533,7 +560,7 @@ function handleShotEvents(ball) {
     const b = B[i];
     if (b.type === "blackhole") {
       const d = Math.hypot(ball.x - W.x[i], ball.y - W.y[i]);
-      if (d < b.horizon + 22 && !st.graze[i]) {
+      if (d < b.horizon + 22 && !st.graze[i] && !doomed(ball)) {
         st.graze[i] = 1;
         R.callout(ball.x, ball.y, "Close call!", "255,170,110"); A.haptic("medium");
         game.slowPulse = 0.35;
@@ -545,7 +572,7 @@ function handleShotEvents(ball) {
       st.inCloud = inside;
     }
   }
-  if (!st.sling && sp > st.launchSpeed + 260 && sp > 520) {
+  if (!st.sling && sp > st.launchSpeed + 260 && sp > 520 && !doomed(ball)) {
     st.sling = true; R.callout(ball.x, ball.y, "Slingshot!", "255,214,120"); A.haptic("light");
   }
   // skin sparks
@@ -555,6 +582,30 @@ function handleShotEvents(ball) {
     const col = sk.sparks === "rainbow" ? `${120 + Math.floor(Math.random() * 135)},${120 + Math.floor(Math.random() * 135)},255` : sk.sparks;
     R.burst(ball.x, ball.y, { n: 1, speed: 25, color: col, life: 0.5, size: 2 });
   }
+}
+
+// Will this ball be swallowed in the next second? (No cheering for a ball that is about to die.)
+function doomed(ball) {
+  const probe = { ...ball, events: [] };
+  let t2 = game.t, out = false;
+  for (let k = 0; k < 130; k++) { t2 += PHYS.dt; const ev = step(game.world, probe, t2); if (ev) { out = ev === "swallowed"; break; } }
+  game.world.at(game.t);
+  return out;
+}
+
+// "Show me a line": the game plays one hole-in-one from here as a demonstration. It is not counted.
+function showLine() {
+  if (!game || game.mode !== "aim" || overlays.length) return;
+  let best = null;
+  for (let a = 0; a < 360; a += 1.5) for (let k = 2; k <= 14; k++) {
+    const p = k / 14, r = (a * Math.PI) / 180, vx = Math.cos(r) * p * PHYS.maxSpeed, vy = Math.sin(r) * p * PHYS.maxSpeed;
+    const res = simulate(game.world, game.rest, game.t, vx, vy);
+    if (res.ev === "holed" && (!best || res.t < best.t)) best = { vx, vy, t: res.t, power: p };
+  }
+  game.world.at(game.t);
+  if (!best) { toastMsg("No single shot from here. Try landing closer", ""); return; }
+  toastMsg("Watch this line", "good");
+  shoot(best, true);
 }
 
 function collectTags(holed) {
@@ -573,6 +624,12 @@ function handleEnd(ev) {
   if (game.shotStats.bounces >= 4) award("pinball");
   if (game.shotStats.maxSpeed >= 900) award("fast");
   btnReset.hidden = true;
+  if (game.demo) {
+    game.demo = false; game.ghost = game.trail; game.trail = []; game.ghostGold = true;
+    game.rest = game.from; game.ball = null; game.mode = "aim";
+    toastMsg(ev === "holed" ? "That's the line. Your turn" : "Your turn", "good");
+    return;
+  }
   game.fates.push(ev);
   collectTags(ev === "holed");
   if (game.trail.length) game.allTrails.push(game.trail);
@@ -600,16 +657,16 @@ function handleEnd(ev) {
   } else if (ev === "swallowed") {
     R.spiral(b.x, b.y); R.kick(6);
     save.count("swallowed"); award("swallowed");
-    penalty("Swallowed +1", "swallowed");
-  } else if (ev === "lost") penalty("Lost in space +1", "lost");
-  else if (ev === "orbit") penalty("Stuck in orbit +1", "orbit");
+    penalty("Swallowed: +1 penalty", "swallowed");
+  } else if (ev === "lost") miss(game.shotStats.lipped ? "Too fast for the cup. Pull back less" : game.near.d < 70 ? "So close. Ball recalled" : "Lost in space. Ball recalled", "lost");
+  else if (ev === "orbit") miss("Still drifting. Ball recalled", "orbit");
 }
 
 // ---------------------------------------------------------------- results
 function scoreName(n, par) {
   if (n === 1) return "Hole in one";
   const d = n - par;
-  return { "-3": "Albatross", "-2": "Eagle", "-1": "Birdie", "0": "Par", "1": "Bogey", "2": "Double bogey" }[d] || `${d > 0 ? "+" : ""}${d}`;
+  return { "-3": "Albatross", "-2": "Eagle", "-1": "Birdie", "0": "Par" }[d] || (d > 0 ? `${d} over par` : `${-d} under par`);
 }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
@@ -835,6 +892,7 @@ function frame(now) {
           const ev = step(game.world, game.ball, game.t);
           handleShotEvents(game.ball);
           game.trail.push(game.ball.x, game.ball.y, 0);
+          { const h = game.level.hole, d = Math.hypot(game.ball.x - h.x, game.ball.y - h.y); if (d < game.near.d) game.near = { d, x: game.ball.x, y: game.ball.y }; }
           if (game.trail.length > 9000) game.trail.splice(0, 3);
           game.flyTime += PHYS.dt;
           if (ev) { handleEnd(ev); if (!game) break; }
@@ -855,6 +913,8 @@ function frame(now) {
       const ballPos = game.ball ? game.ball : game.mode === "done" ? null : restPos(game.world, game.rest, game.t);
       if (game.mode !== "done" && game.mode !== "fly" && R.view.zoom > 1.001) R.view.zoom += (1 - R.view.zoom) * Math.min(1, dt * 3);
       R.draw({ world: game.world, t: game.t, mode: game.mode, aim: game.aim, aiming: !!game.aim, preview: game.preview, trail: game.trail, ghost: game.ghost, ballPos,
+        nearMark: game.mode === "aim" ? game.nearMark : null, ghostGold: game.ghostGold,
+        labelAlpha: game.aim || game.mode === "fly" ? 0 : Math.max(0, Math.min(1, (9 - game.t) / 1.5)),
         skin: game.skin, tutorial: game.tutorial && game.mode === "aim" && !game.aim && !overlays.length });
     }
   } else {

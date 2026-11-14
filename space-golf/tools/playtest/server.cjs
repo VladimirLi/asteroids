@@ -102,7 +102,7 @@ const commands = {
   },
   async release() {
     if (!finger) return look("no finger down");
-    await run(100); await touch("touchEnd"); finger = null;
+    await touch("touchEnd"); finger = null;
     await run(50);
     const seen = new Set(); let t = 0; const frames = [];
     if ((await gameMode()) === "fly") {

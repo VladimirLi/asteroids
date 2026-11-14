@@ -53,3 +53,19 @@ Planet colors: `#5b8def` blue, `#e0905a` orange, `#7cc97a` green, `#c27be0` viol
 5. Difficulty rises through a chapter. Hole 9 of each chapter is the "signature hole": the most memorable layout in it.
 6. Mechanic intro holes are gentle: the new body is the star of the hole and the obvious route uses it.
 7. Text: plain, short, second person, no exclamation marks, no em dashes. Intros ≤ 2 sentences. Legends ≤ 2 sentences. Hints ≤ 1 sentence.
+
+## Lessons from playtest round 1 (read before changing holes)
+Human testers (touch only, no solver) struggled badly. The engine has since changed:
+- The aim preview is now long (distance-based, continues through wormholes), turns gold and says GOES IN when the shot will drop. In chapter 1 holes 1-5 it reaches the whole course.
+- A missed ball (off the course, or still flying after 11 s) costs only the stroke played and returns to where the shot started. Only black holes add a penalty stroke.
+- The cup is more forgiving (capture speed 250, green radius 78) and wormhole mouths are a little larger. Moving wormholes no longer change the ball's velocity.
+- After 3 misses the player can ask to be shown a line; the pause menu can skip a hole.
+
+Design rules that came out of it:
+1. **Hints must be true.** If the hint names a route ("no straight line", "shoot while quiet", "hit it hard"), the solver must show that route works and the contradicting one does not (or reword the hint). Say which side / which planet when it matters.
+2. **Every hole needs a lay-up.** A slightly wrong shot should usually land somewhere playable (planet, moon, asteroid) rather than leave the course. Aim for the solver's `lands` figure of 6% or more, and landing spots on the cup side must not be dead ends.
+3. **Aim window.** `window` in the solver output is how many degrees wide the best hole-in-one window is. Keep it at 4 degrees or more in chapters 1-2 and 3 or more later; on moving holes the `worst` window should be 2 or more.
+4. **No hazard right next to the cup stealing slow balls.** Keep black holes 230+ from the cup unless a nebula or planet shields it.
+5. **Intro holes are gentle**: the obvious, safe route must work; the risky route is the bonus.
+6. **Par should mean something.** If a naive first shot aces a hole, it is par 2, or it needs an obstacle.
+7. Labels and names must match what the player sees (nothing called "hidden" that is in plain view).
