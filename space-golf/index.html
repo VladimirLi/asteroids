@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Perihelion Golf</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: full-bleed canvas playfield, thin instrument-style HUD strips top and bottom, modal cards for briefings. Single deliberate dark look. */
+:root {
+  --void: #080c1c;
+  --panel: rgba(14, 20, 42, 0.86);
+  --panel-line: rgba(140, 160, 220, 0.22);
+  --ink: #e6ebf7;
+  --dim: #8d97b7;
+  --flag: #ffc94d;
+  --trail: #6fe0d2;
+  --danger: #ff6b6b;
+  --display: "Syne", "Trebuchet MS", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; margin: 0; }
+[hidden] { display: none !important; }
+body {
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 14px;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#stage { position: fixed; inset: 0; touch-action: none; display: block; }
+button {
+  font: inherit;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--panel-line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:hover { background: rgba(255, 255, 255, 0.12); }
+button:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
+button.primary { background: var(--flag); color: #1a1405; border-color: var(--flag); font-weight: 600; }
+button.primary:hover { background: #ffd877; }
+
+.hud {
+  position: fixed;
+  left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  pointer-events: none;
+}
+.hud > * { pointer-events: auto; }
+#top { top: 0; padding-top: calc(env(safe-area-inset-top, 0px) + 10px); flex-wrap: wrap; }
+#bottom { bottom: 0; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); justify-content: center; }
+.title-block { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.eyebrow { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+#holeName { font-family: var(--display); font-weight: 800; font-size: 20px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-score { font-variant-numeric: tabular-nums; text-align: right; }
+#strokes { font-size: 18px; font-weight: 600; }
+.buttons { display: flex; gap: 6px; }
+#hint {
+  max-width: 640px;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink);
+  pointer-events: none;
+}
+#hint b { color: var(--flag); font-weight: 600; }
+
+#toast {
+  position: fixed; left: 50%; top: 22%;
+  transform: translate(-50%, 0);
+  font-family: var(--display); font-weight: 800; font-size: 22px;
+  padding: 8px 16px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--panel-line);
+  pointer-events: none; opacity: 0; transition: opacity 0.25s;
+  white-space: nowrap;
+}
+#toast.show { opacity: 1; }
+#toast.bad { color: var(--danger); }
+#toast.good { color: var(--flag); }
+
+.overlay {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 8, 20, 0.55);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px;
+}
+.card {
+  width: min(460px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  padding: 20px;
+  display: flex; flex-direction: column; gap: 12px;
+  backdrop-filter: blur(6px);
+}
+.card h2 { font-family: var(--display); font-weight: 800; font-size: 28px; margin: 0; line-height: 1.05; text-wrap: balance; }
+.card p { margin: 0; line-height: 1.55; color: var(--ink); }
+.card .meta { color: var(--dim); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+.card .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.legend { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px dashed var(--panel-line); border-radius: 10px; }
+.legend canvas { flex: 0 0 auto; }
+.legend p { font-size: 12.5px; color: var(--dim); }
+.scorelist { display: grid; grid-template-columns: 2.2em 1fr auto auto; gap: 4px 12px; font-variant-numeric: tabular-nums; }
+.scorelist button { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; text-align: left; padding: 8px 10px; }
+.scorelist .best { color: var(--flag); }
+.scorelist .muted { color: var(--dim); }
+@media (max-width: 520px) {
+  #holeName { font-size: 17px; }
+  .buttons button { padding: 7px 9px; font-size: 12px; }
+  #hint { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<div class="hud" id="top">
+  <div class="title-block">
+    <span class="eyebrow" id="holeNum">Hole 1 of 10</span>
+    <span id="holeName">Tee Off</span>
+  </div>
+  <div class="card-score">
+    <div class="eyebrow">Strokes / Par</div>
+    <div id="strokes">0 / 1</div>
+  </div>
+  <div class="buttons">
+    <button id="btnReset" title="Return ball to last position (+1 stroke)">Reset ball</button>
+    <button id="btnHoles" title="Scorecard and hole select">Holes</button>
+  </div>
+</div>
+
+<div class="hud" id="bottom"><div id="hint"></div></div>
+<div id="toast"></div>
+
+<div class="overlay" id="briefing" hidden>
+  <div class="card">
+    <span class="meta" id="bMeta"></span>
+    <h2 id="bTitle"></h2>
+    <p id="bText"></p>
+    <div class="legend" id="bLegend"><canvas id="bIcon" width="56" height="56"></canvas><p id="bLegendText"></p></div>
+    <div class="actions"><button class="primary" id="bPlay">Tee off</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="result" hidden>
+  <div class="card">
+    <span class="meta" id="rMeta"></span>
+    <h2 id="rTitle"></h2>
+    <p id="rText"></p>
+    <div class="actions">
+      <button id="rRetry">Play again</button>
+      <button class="primary" id="rNext">Next hole</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="menu" hidden>
+  <div class="card">
+    <span class="meta">Scorecard</span>
+    <h2>Pick a hole</h2>
+    <div class="scorelist" id="scorelist"></div>
+    <div class="actions"><button id="mClose">Close</button></div>
+  </div>
+</div>
+
+<script>
+// CORE-BEGIN  (pure simulation + level data; also loaded by tools/solve.js)
+const PHYS = {
+  dt: 1 / 120,
+  ballR: 7,
+  restSpeed: 42,      // slower than this when touching a planet = landed
+  restitution: 0.42,
+  friction: 0.7,
+  maxSpeed: 620,      // launch speed at full power
+  captureSpeed: 210,  // cup only catches balls slower than this
+  holeR: 20,
+  greenR: 64,         // soft braking zone around every cup
+  greenDrag: 2.2,
+  maxFlight: 15,      // seconds before a ball is declared lost in orbit
+  margin: 260,        // how far outside the course before the ball is lost
+  soft: 10,
+};
+
+// Gravity strength is "mu" (G*M). Acceleration = mu / r^2. Negative mu pushes.
+const LEVELS = [
+  {
+    name: "Tee Off", par: 1, w: 1400, h: 900, preview: 2.5,
+    intro: "Drag anywhere on the screen and pull back, like a slingshot. The further you pull, the harder the shot. Let go to launch.",
+    legend: ["cup", "The cup sits on a small green that slows the ball down. It only catches a slow ball: arrive too fast and you lip out. A gold ring on the preview line means the shot goes in."],
+    hint: "Line the dotted preview up with the cup. <b>Gentle</b> shots drop in; hard ones fly past.",
+    tee: { x: 330, y: 450 },
+    hole: { x: 1070, y: 450, mu: 60000 },
+    bodies: [],
+  },
+  {
+    name: "Bent Path", par: 1, w: 1400, h: 900, preview: 2.0,
+    intro: "Planets pull everything toward them. A shot that would fly straight gets bent into a curve.",
+    legend: ["planet", "Planet. The dashed rings show its pull: the closer the ring, the stronger the tug. The dotted preview line already includes it."],
+    hint: "Aim <b>wide</b> of the planet and let gravity curve the ball in.",
+    tee: { x: 200, y: 450 },
+    hole: { x: 1200, y: 450, mu: 60000 },
+    bodies: [
+      { type: "planet", x: 700, y: 450, r: 60, mu: 2.2e6, color: "#5b8def", label: "Planet: pulls" },
+    ],
+  },
+  {
+    name: "Slingshot", par: 1, w: 1400, h: 900, preview: 1.4,
+    intro: "Skim close past a planet and it whips you around its far side. That is how real spacecraft turn corners.",
+    legend: ["planet", "The cup is hidden behind the planet. There is no straight line to it."],
+    hint: "Graze the planet's edge to <b>whip around</b> behind it.",
+    tee: { x: 200, y: 760 },
+    hole: { x: 950, y: 170, mu: 60000 },
+    bodies: [
+      { type: "planet", x: 720, y: 430, r: 70, mu: 3.2e6, color: "#e0905a" },
+      { type: "planet", x: 1180, y: 520, r: 40, mu: 1.0e6, color: "#7cc97a" },
+    ],
+  },
+  {
+    name: "Stepping Stones", par: 2, w: 1400, h: 900, preview: 1.4,
+    intro: "Touch down on a planet gently and you land. Your next shot starts from where you landed. Every shot counts as a stroke.",
+    legend: ["planet", "Planets are safe places to land. Hit one too hard and you bounce off instead."],
+    hint: "Land on the <b>middle planet</b>, then take your second shot from there.",
+    tee: { x: 160, y: 700 },
+    hole: { x: 1250, y: 200, mu: 60000 },
+    bodies: [
+      { type: "planet", x: 680, y: 460, r: 75, mu: 2.6e6, color: "#c27be0", label: "Land here" },
+      { type: "planet", x: 1050, y: 700, r: 45, mu: 1.2e6, color: "#5b8def" },
+    ],
+  },
+  {
+    name: "Event Horizon", par: 2, w: 1400, h: 900, preview: 1.3,
+    intro: "Black holes pull far harder than planets. Cross the inner ring and the ball is gone: one penalty stroke, and you play again from your last spot.",
+    legend: ["blackhole", "Black hole. Keep outside the inner ring. A near miss gives you a huge speed boost."],
+    hint: "Go <b>around</b> the black hole, or dare a close pass for a speed boost.",
+    tee: { x: 180, y: 450 },
+    hole: { x: 1230, y: 450, mu: 60000 },
+    bodies: [
+      { type: "blackhole", x: 700, y: 450, r: 22, horizon: 30, mu: 6.0e6, label: "Black hole: swallows" },
+      { type: "planet", x: 420, y: 160, r: 45, mu: 1.2e6, color: "#5b8def" },
+      { type: "planet", x: 1000, y: 760, r: 50, mu: 1.5e6, color: "#e0905a" },
+    ],
+  },
+  {
+    name: "Push Back", par: 2, w: 1400, h: 900, preview: 1.3,
+    intro: "Red stars push instead of pull. Their rings mark where the push gets strong. Use them as bumpers to bounce the ball around a corner.",
+    legend: ["repulsor", "Repulsor star. Nothing lands on it, and it shoves the ball away."],
+    hint: "Bank the ball <b>off a red star's push</b> to reach the cup tucked behind them.",
+    tee: { x: 200, y: 450 },
+    hole: { x: 1180, y: 300, mu: 60000 },
+    bodies: [
+      { type: "repulsor", x: 760, y: 210, r: 26, mu: -2.2e6, label: "Repulsor: pushes" },
+      { type: "repulsor", x: 760, y: 450, r: 26, mu: -2.2e6 },
+      { type: "repulsor", x: 760, y: 690, r: 26, mu: -2.2e6 },
+      { type: "planet", x: 1160, y: 680, r: 55, mu: 1.8e6, color: "#7cc97a" },
+    ],
+  },
+  {
+    name: "Nebula", par: 2, w: 1400, h: 900, preview: 1.3,
+    intro: "Gas clouds have no gravity. They slow the ball down, like a sand trap in reverse: here the trap is what lets you hole out.",
+    legend: ["cloud", "Nebula. The ball loses speed while it is inside."],
+    hint: "Any route past the black hole arrives <b>too fast</b>. Let the nebula brake you.",
+    tee: { x: 180, y: 700 },
+    hole: { x: 1180, y: 300, mu: 60000 },
+    bodies: [
+      { type: "cloud", x: 1180, y: 300, r: 170, drag: 1.6, label: "Nebula: slows" },
+      { type: "blackhole", x: 720, y: 470, r: 22, horizon: 30, mu: 5.0e6 },
+      { type: "planet", x: 330, y: 260, r: 50, mu: 1.5e6, color: "#c27be0" },
+    ],
+  },
+  {
+    name: "Wormhole", par: 2, w: 1400, h: 900, preview: 1.3,
+    intro: "Wormholes come in pairs. Fly into one and you come out of the other, at the same speed and heading.",
+    legend: ["wormhole", "Matching colors are linked. The cup sits inside a ring of red stars, and only the wormhole gets you in."],
+    hint: "Thread the ball into the <b>wormhole</b>. It comes out inside the ring.",
+    tee: { x: 200, y: 450 },
+    hole: { x: 1080, y: 450, mu: 60000 },
+    bodies: [
+      { type: "wormhole", x: 520, y: 200, r: 26, link: 1, hue: 190, label: "Wormhole" },
+      { type: "wormhole", x: 1000, y: 450, r: 26, link: 0, hue: 190 },
+      { type: "repulsor", x: 1280, y: 450, r: 20, mu: -2.0e6 },
+      { type: "repulsor", x: 1221, y: 591, r: 20, mu: -2.0e6 },
+      { type: "repulsor", x: 1080, y: 650, r: 20, mu: -2.0e6 },
+      { type: "repulsor", x: 939, y: 591, r: 20, mu: -2.0e6 },
+      { type: "repulsor", x: 880, y: 450, r: 20, mu: -2.0e6 },
+      { type: "repulsor", x: 939, y: 309, r: 20, mu: -2.0e6 },
+      { type: "repulsor", x: 1080, y: 250, r: 20, mu: -2.0e6 },
+      { type: "repulsor", x: 1221, y: 309, r: 20, mu: -2.0e6 },
+      { type: "planet", x: 540, y: 640, r: 55, mu: 1.8e6, color: "#5b8def" },
+    ],
+  },
+  {
+    name: "Moon Dance", par: 2, w: 1400, h: 900, preview: 1.6,
+    intro: "Moons orbit their planets, so the course keeps changing. The preview line takes the moon's movement into account. Wait for the right moment.",
+    legend: ["moon", "A moon's pull moves with it. You can also land on a moon and ride it around."],
+    hint: "Watch the moon swing by, and <b>time your shot</b> to the gap.",
+    tee: { x: 180, y: 450 },
+    hole: { x: 1230, y: 450, mu: 60000 },
+    bodies: [
+      { type: "planet", x: 720, y: 450, r: 70, mu: 3.0e6, color: "#e0905a" },
+      { type: "moon", r: 28, mu: 7.0e5, color: "#c9d1e6", orbit: { around: 0, r: 230, period: 6, phase: 0 }, label: "Moon: orbits" },
+    ],
+  },
+  {
+    name: "Pulsar", par: 2, w: 1400, h: 900, preview: 1.3,
+    intro: "A pulsar switches its gravity on and off in a steady rhythm. When it is on, it pulls harder than a black hole. When it is off, you can fly straight past.",
+    legend: ["pulsar", "Pulsar. The bright ring means its pull is on. The arc around it counts down to the next switch."],
+    hint: "Shoot while the pulsar is <b>quiet</b>, or ride a pulse around it.",
+    tee: { x: 180, y: 450 },
+    hole: { x: 1220, y: 450, mu: 60000 },
+    bodies: [
+      { type: "pulsar", x: 700, y: 450, r: 18, mu: 7.0e6, pulse: { period: 3.2, on: 1.4, offset: 0 }, label: "Pulsar: on / off" },
+      { type: "planet", x: 700, y: 120, r: 45, mu: 1.2e6, color: "#7cc97a" },
+      { type: "planet", x: 700, y: 780, r: 45, mu: 1.2e6, color: "#c27be0" },
+    ],
+  },
+  {
+    name: "Grand Tour", par: 3, w: 1400, h: 900, preview: 1.1,
+    intro: "Everything at once. There are several ways round this hole. Plan a route, land when you need to, and use the nebula to slow down at the end.",
+    legend: ["planet", "No new bodies here. This hole tests everything from the earlier ones."],
+    hint: "Plan in steps: <b>land</b>, <b>slingshot</b>, <b>brake</b>.",
+    tee: { x: 150, y: 780 },
+    hole: { x: 1250, y: 150, mu: 60000 },
+    bodies: [
+      { type: "planet", x: 420, y: 520, r: 60, mu: 2.2e6, color: "#5b8def" },
+      { type: "moon", r: 22, mu: 5.0e5, color: "#c9d1e6", orbit: { around: 0, r: 160, period: 5, phase: 1.2 } },
+      { type: "blackhole", x: 820, y: 400, r: 20, horizon: 28, mu: 4.0e6 },
+      { type: "repulsor", x: 1050, y: 640, r: 24, mu: -1.8e6 },
+      { type: "cloud", x: 1250, y: 150, r: 140, drag: 1.4 },
+      { type: "pulsar", x: 980, y: 160, r: 16, mu: 4.0e6, pulse: { period: 2.8, on: 1.0, offset: 0.7 } },
+      { type: "planet", x: 1200, y: 760, r: 45, mu: 1.2e6, color: "#e0905a" },
+    ],
+  },
+];
+
+function bodyAt(level, i, t) {
+  const b = level.bodies[i];
+  if (!b.orbit) return { x: b.x, y: b.y, vx: 0, vy: 0 };
+  const c = bodyAt(level, b.orbit.around, t);
+  const w = (2 * Math.PI) / b.orbit.period;
+  const a = b.orbit.phase + w * t;
+  return {
+    x: c.x + b.orbit.r * Math.cos(a),
+    y: c.y + b.orbit.r * Math.sin(a),
+    vx: c.vx - b.orbit.r * w * Math.sin(a),
+    vy: c.vy + b.orbit.r * w * Math.cos(a),
+  };
+}
+
+function pulsarPhase(b, t) {
+  const p = b.pulse;
+  const ph = (((t + p.offset) % p.period) + p.period) % p.period;
+  return { on: ph < p.on, remaining: ph < p.on ? p.on - ph : p.period - ph, frac: ph < p.on ? ph / p.on : (ph - p.on) / (p.period - p.on) };
+}
+
+function bodiesAt(level, t) {
+  return level.bodies.map((b, i) => {
+    const s = bodyAt(level, i, t);
+    return { def: b, i, type: b.type, x: s.x, y: s.y, vx: s.vx, vy: s.vy, r: b.r,
+      active: b.type !== "pulsar" || pulsarPhase(b, t).on };
+  });
+}
+
+const SOLID = { planet: true, moon: true, repulsor: true, pulsar: true };
+const LANDABLE = { planet: true, moon: true };
+
+// Ball state: {x, y, vx, vy, time, cool, lip, events[]}
+// Returns a terminal event ("holed" | "rest" | "swallowed" | "lost" | "orbit") or null.
+function stepBall(s, level, t, dt) {
+  const B = bodiesAt(level, t);
+  let ax = 0, ay = 0, drag = 0;
+  const soft2 = PHYS.soft * PHYS.soft;
+  for (const b of B) {
+    const dx = b.x - s.x, dy = b.y - s.y;
+    if (b.type === "cloud") {
+      if (dx * dx + dy * dy < b.r * b.r) drag += b.def.drag;
+      continue;
+    }
+    const mu = b.def.mu;
+    if (!mu || !b.active) continue;
+    const r2 = dx * dx + dy * dy + soft2;
+    const f = mu / (r2 * Math.sqrt(r2));
+    ax += dx * f; ay += dy * f;
+  }
+  {
+    const h = level.hole;
+    const dx = h.x - s.x, dy = h.y - s.y;
+    if (dx * dx + dy * dy < PHYS.greenR * PHYS.greenR) drag += PHYS.greenDrag;
+    const r2 = dx * dx + dy * dy + soft2;
+    const f = h.mu / (r2 * Math.sqrt(r2));
+    ax += dx * f; ay += dy * f;
+  }
+  s.vx += ax * dt; s.vy += ay * dt;
+  if (drag) { const k = Math.exp(-drag * dt); s.vx *= k; s.vy *= k; }
+  s.x += s.vx * dt; s.y += s.vy * dt;
+  s.time += dt;
+  if (s.cool > 0) s.cool -= dt;
+
+  for (const b of B) {
+    const dx = s.x - b.x, dy = s.y - b.y;
+    const d = Math.hypot(dx, dy);
+    if (b.type === "blackhole") {
+      if (d < b.def.horizon) return "swallowed";
+    } else if (b.type === "wormhole") {
+      if (d < b.r && s.cool <= 0) {
+        const out = B[b.def.link];
+        const sp = Math.hypot(s.vx, s.vy) || 1;
+        s.x = out.x + (s.vx / sp) * (out.r + 4);
+        s.y = out.y + (s.vy / sp) * (out.r + 4);
+        s.cool = 0.4;
+        s.events.push("warp");
+      }
+    } else if (SOLID[b.type]) {
+      const minD = b.r + PHYS.ballR;
+      if (d < minD) {
+        const nx = dx / (d || 1), ny = dy / (d || 1);
+        s.x = b.x + nx * minD; s.y = b.y + ny * minD;
+        let rvx = s.vx - b.vx, rvy = s.vy - b.vy;
+        const vn = rvx * nx + rvy * ny;
+        if (vn < 0) {
+          const e = LANDABLE[b.type] ? PHYS.restitution : 0.85;
+          let tx = rvx - vn * nx, ty = rvy - vn * ny;
+          const fr = LANDABLE[b.type] ? PHYS.friction : 1;
+          rvx = -e * vn * nx + tx * fr;
+          rvy = -e * vn * ny + ty * fr;
+          s.vx = rvx + b.vx; s.vy = rvy + b.vy;
+          s.events.push("bounce");
+        }
+        if (LANDABLE[b.type] && Math.hypot(rvx, rvy) < PHYS.restSpeed) {
+          s.rest = { i: b.i, ang: Math.atan2(ny, nx) };
+          return "rest";
+        }
+      }
+    }
+  }
+
+  const h = level.hole;
+  const hd = Math.hypot(s.x - h.x, s.y - h.y);
+  if (hd < PHYS.holeR) {
+    if (Math.hypot(s.vx, s.vy) < PHYS.captureSpeed) return "holed";
+    if (!s.lip) { s.lip = true; s.events.push("lip"); }
+  } else if (hd > PHYS.holeR * 2) s.lip = false;
+
+  const m = PHYS.margin;
+  if (s.x < -m || s.y < -m || s.x > level.w + m || s.y > level.h + m) return "lost";
+  if (s.time > PHYS.maxFlight) return "orbit";
+  return null;
+}
+
+// Where the ball sits when resting (on the tee, or on a body).
+function restPos(level, rest, t) {
+  if (!rest) return { x: level.tee.x, y: level.tee.y, vx: 0, vy: 0 };
+  if (rest.i === undefined) return { x: rest.x, y: rest.y, vx: 0, vy: 0 };
+  const b = bodyAt(level, rest.i, t);
+  const R = level.bodies[rest.i].r + PHYS.ballR + 0.5;
+  return { x: b.x + R * Math.cos(rest.ang), y: b.y + R * Math.sin(rest.ang), vx: b.vx, vy: b.vy };
+}
+
+function launchState(level, rest, t, vx, vy) {
+  const p = restPos(level, rest, t);
+  return { x: p.x, y: p.y, vx: vx + p.vx, vy: vy + p.vy, time: 0, cool: 0, lip: false, events: [] };
+}
+// CORE-END
+</script>
+
+<script>
+(() => {
+  const canvas = document.getElementById("stage");
+  const ctx = canvas.getContext("2d");
+  const $ = (id) => document.getElementById(id);
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  };
+  const best = store.get("perihelion.best") || {};
+
+  // ---------- game state ----------
+  let levelIdx = 0, level = LEVELS[0];
+  let simTime = 0;
+  let mode = "brief";         // brief | aim | fly | done
+  let rest = null;            // where the ball sits (null = tee)
+  let ball = null;            // flying ball state
+  let strokes = 0;
+  let trail = [], lastTrail = [];
+  let aim = null;             // {sx, sy, cx, cy}
+  let preview = [];
+  let previewHit = null;
+
+  // ---------- view ----------
+  let W = 0, H = 0, dpr = 1, view = { s: 1, rot: 0, cx: 0, cy: 0 };
+  let stars = null;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    canvas.style.width = W + "px"; canvas.style.height = H + "px";
+    fitView();
+    buildStars();
+  }
+  function fitView() {
+    const topPad = $("top").offsetHeight + 8;
+    const botPad = $("bottom").offsetHeight + 8;
+    const availW = W - 24, availH = Math.max(100, H - topPad - botPad);
+    const portrait = availH > availW * 1.05;
+    view.rot = portrait ? -Math.PI / 2 : 0;
+    const lw = portrait ? level.h : level.w, lh = portrait ? level.w : level.h;
+    view.s = Math.min(availW / lw, availH / lh);
+    view.cx = W / 2; view.cy = topPad + availH / 2;
+  }
+  function w2s(x, y) {
+    const c = Math.cos(view.rot), s = Math.sin(view.rot);
+    const dx = (x - level.w / 2) * view.s, dy = (y - level.h / 2) * view.s;
+    return { x: view.cx + dx * c - dy * s, y: view.cy + dx * s + dy * c };
+  }
+  function screenVecToWorld(dx, dy) {
+    const c = Math.cos(-view.rot), s = Math.sin(-view.rot);
+    return { x: dx * c - dy * s, y: dx * s + dy * c };
+  }
+  function setWorldTransform() {
+    const c = Math.cos(view.rot) * view.s * dpr, s = Math.sin(view.rot) * view.s * dpr;
+    const o = w2s(0, 0);
+    ctx.setTransform(c, s, -s, c, o.x * dpr, o.y * dpr);
+  }
+  function setScreenTransform() { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+
+  function buildStars() {
+    stars = document.createElement("canvas");
+    stars.width = canvas.width; stars.height = canvas.height;
+    const g = stars.getContext("2d");
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const n = Math.round((W * H) / 2600);
+    for (let i = 0; i < n; i++) {
+      const x = rnd() * stars.width, y = rnd() * stars.height;
+      const a = 0.15 + rnd() * 0.6, r = (rnd() < 0.08 ? 1.4 : 0.7) * dpr;
+      g.fillStyle = `rgba(210,220,255,${a})`;
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    }
+  }
+
+  // ---------- level flow ----------
+  function loadLevel(i) {
+    levelIdx = i; level = LEVELS[i];
+    simTime = 0; rest = null; ball = null; strokes = 0;
+    trail = []; lastTrail = []; aim = null; preview = []; previewHit = null;
+    $("holeNum").textContent = `Hole ${i + 1} of ${LEVELS.length}`;
+    $("holeName").textContent = level.name;
+    $("hint").innerHTML = level.hint;
+    updateScore();
+    fitView();
+    showBriefing();
+  }
+  function updateScore() { $("strokes").textContent = `${strokes} / ${level.par}`; }
+
+  function showBriefing() {
+    mode = "brief";
+    $("bMeta").textContent = `Hole ${levelIdx + 1} · Par ${level.par}`;
+    $("bTitle").textContent = level.name;
+    $("bText").textContent = level.intro;
+    $("bLegendText").textContent = level.legend[1];
+    drawIcon($("bIcon"), level.legend[0]);
+    $("briefing").hidden = false;
+    $("bPlay").focus();
+  }
+  $("bPlay").onclick = () => { $("briefing").hidden = true; mode = "aim"; };
+
+  function scoreName(n, par) {
+    if (n === 1) return "Hole in one!";
+    const d = n - par;
+    return { "-3": "Albatross!", "-2": "Eagle!", "-1": "Birdie!", "0": "Par", "1": "Bogey", "2": "Double bogey" }[d] || `+${d}`;
+  }
+  function finishHole() {
+    mode = "done";
+    const prev = best[levelIdx];
+    if (!prev || strokes < prev) { best[levelIdx] = strokes; store.set("perihelion.best", best); }
+    $("rMeta").textContent = `Hole ${levelIdx + 1} · ${level.name}`;
+    $("rTitle").textContent = scoreName(strokes, level.par);
+    $("rText").textContent = `${strokes} stroke${strokes === 1 ? "" : "s"} on a par ${level.par}.` +
+      (prev && strokes >= prev ? ` Your best here is ${prev}.` : "");
+    const last = levelIdx === LEVELS.length - 1;
+    $("rNext").textContent = last ? "Scorecard" : "Next hole";
+    setTimeout(() => { $("result").hidden = false; $("rNext").focus(); }, 650);
+  }
+  $("rRetry").onclick = () => { $("result").hidden = true; loadLevel(levelIdx); };
+  $("rNext").onclick = () => {
+    $("result").hidden = true;
+    if (levelIdx === LEVELS.length - 1) openMenu(); else loadLevel(levelIdx + 1);
+  };
+
+  function openMenu() {
+    const list = $("scorelist");
+    list.innerHTML = "";
+    let total = 0, totalPar = 0, complete = true;
+    LEVELS.forEach((L, i) => {
+      const b = document.createElement("button");
+      const sc = best[i];
+      if (sc) { total += sc; totalPar += L.par; } else complete = false;
+      b.innerHTML = `<span class="muted">${i + 1}</span><span>${L.name}</span><span class="muted">par ${L.par}</span><span class="${sc ? "best" : "muted"}">${sc ? sc : "–"}</span>`;
+      b.onclick = () => { $("menu").hidden = true; loadLevel(i); };
+      list.appendChild(b);
+    });
+    const tot = document.createElement("div");
+    tot.style.gridColumn = "1 / -1";
+    tot.className = "muted";
+    tot.style.paddingTop = "6px";
+    const diff = total - totalPar;
+    tot.textContent = complete ? `Full round: ${total} strokes (${diff === 0 ? "even" : (diff > 0 ? "+" : "") + diff})` : "Finish every hole to see your round total.";
+    list.appendChild(tot);
+    $("menu").hidden = false;
+    $("mClose").focus();
+  }
+  $("btnHoles").onclick = openMenu;
+  $("mClose").onclick = () => { $("menu").hidden = true; };
+
+  $("btnReset").onclick = () => {
+    if (mode === "fly") { penalty("Ball reset +1"); }
+  };
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "r" || e.key === "R") $("btnReset").click();
+  });
+
+  // ---------- toast ----------
+  let toastTimer = 0;
+  function toast(msg, kind) {
+    const el = $("toast");
+    el.textContent = msg;
+    el.className = "show " + (kind || "");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (el.className = kind || ""), 1300);
+  }
+
+  // ---------- shooting ----------
+  function launchVelocity() {
+    if (!aim) return null;
+    const dx = aim.sx - aim.cx, dy = aim.sy - aim.cy;    // pull back = shoot opposite of drag
+    const len = Math.hypot(dx, dy);
+    if (len < 12) return null;
+    const full = Math.min(W, H) * 0.42;
+    const power = Math.min(1, len / full);
+    const v = screenVecToWorld(dx / len, dy / len);
+    return { vx: v.x * power * PHYS.maxSpeed, vy: v.y * power * PHYS.maxSpeed, power };
+  }
+
+  function computePreview() {
+    preview = []; previewHit = null;
+    const lv = launchVelocity();
+    if (!lv) return;
+    const s = launchState(level, rest, simTime, lv.vx, lv.vy);
+    const steps = Math.round(level.preview / PHYS.dt);
+    let t = simTime;
+    for (let k = 0; k < steps; k++) {
+      t += PHYS.dt;
+      const ev = stepBall(s, level, t, PHYS.dt);
+      if (k % 4 === 0) preview.push({ x: s.x, y: s.y, warp: s.events.includes("warp") });
+      s.events.length = 0;
+      if (ev) { previewHit = { ev, x: s.x, y: s.y }; break; }
+    }
+  }
+
+  function shoot() {
+    const lv = launchVelocity();
+    aim = null; preview = [];
+    if (!lv) return;
+    ball = launchState(level, rest, simTime, lv.vx, lv.vy);
+    ball.from = rest;
+    strokes++; updateScore();
+    lastTrail = trail; trail = [];
+    mode = "fly";
+  }
+
+  function penalty(msg) {
+    strokes++; updateScore();
+    toast(msg, "bad");
+    rest = ball.from;            // play again from where the shot started
+    ball = null;
+    mode = "aim";
+  }
+
+  canvas.addEventListener("pointerdown", (e) => {
+    if (mode !== "aim") return;
+    canvas.setPointerCapture(e.pointerId);
+    aim = { sx: e.clientX, sy: e.clientY, cx: e.clientX, cy: e.clientY, id: e.pointerId };
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!aim || e.pointerId !== aim.id) return;
+    aim.cx = e.clientX; aim.cy = e.clientY;
+  });
+  const end = (e) => { if (aim && e.pointerId === aim.id) shoot(); };
+  canvas.addEventListener("pointerup", end);
+  canvas.addEventListener("pointercancel", () => { aim = null; preview = []; });
+
+  // ---------- loop ----------
+  let last = performance.now(), acc = 0;
+  function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    if (mode !== "brief") {
+      acc += dt;
+      while (acc >= PHYS.dt) {
+        acc -= PHYS.dt;
+        simTime += PHYS.dt;
+        if (mode === "fly" && ball) {
+          const ev = stepBall(ball, level, simTime, PHYS.dt);
+          for (const e2 of ball.events) {
+            if (e2 === "lip") toast("Lipped out: too fast", "bad");
+            if (e2 === "warp") trail.push(null);
+          }
+          ball.events.length = 0;
+          trail.push({ x: ball.x, y: ball.y });
+          if (trail.length > 2400) trail.shift();
+          if (ev) handleEvent(ev);
+        }
+      }
+    } else acc = 0;
+    if (aim) computePreview();
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  function handleEvent(ev) {
+    if (ev === "holed") {
+      toast(scoreName(strokes, level.par), "good");
+      rest = { x: level.hole.x, y: level.hole.y };
+      ball = null;
+      finishHole();
+    } else if (ev === "rest") {
+      rest = ball.rest; ball = null; mode = "aim";
+      toast("Landed", "");
+    } else if (ev === "swallowed") penalty("Swallowed +1");
+    else if (ev === "lost") penalty("Lost in space +1");
+    else if (ev === "orbit") penalty("Stuck in orbit +1");
+  }
+
+  // ---------- drawing ----------
+  function fieldRings(b, mu) {
+    // radii where acceleration equals these thresholds: a = |mu| / r^2
+    const out = [];
+    for (const a of [520, 200, 80]) {
+      const r = Math.sqrt(Math.abs(mu) / a);
+      if (r > b.r + 6 && r < 520) out.push(r);
+    }
+    return out;
+  }
+
+  function draw() {
+    setScreenTransform();
+    ctx.fillStyle = "#080c1c";
+    ctx.fillRect(0, 0, W, H);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (stars) ctx.drawImage(stars, 0, 0);
+
+    setWorldTransform();
+    const px = 1 / view.s;  // one screen pixel in world units
+
+    // course boundary
+    ctx.strokeStyle = "rgba(140,160,220,0.10)";
+    ctx.lineWidth = px;
+    ctx.setLineDash([6 * px, 8 * px]);
+    ctx.strokeRect(0, 0, level.w, level.h);
+    ctx.setLineDash([]);
+
+    const B = bodiesAt(level, simTime);
+
+    // clouds first
+    for (const b of B) if (b.type === "cloud") drawCloud(b);
+    // field rings
+    for (const b of B) {
+      if (!b.def.mu || b.type === "cloud") continue;
+      if (b.type === "pulsar" && !b.active) continue;
+      const rings = fieldRings(b, b.def.mu);
+      const col = b.def.mu < 0 ? "255,120,110" : b.type === "pulsar" ? "150,210,255" : "170,190,255";
+      rings.forEach((r, k) => {
+        ctx.strokeStyle = `rgba(${col},${0.32 - k * 0.09})`;
+        ctx.lineWidth = 1.2 * px;
+        ctx.setLineDash([5 * px, 7 * px]);
+        ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, Math.PI * 2); ctx.stroke();
+      });
+      ctx.setLineDash([]);
+    }
+    // orbits of moons
+    for (const b of B) if (b.def.orbit) {
+      const c = B[b.def.orbit.around];
+      ctx.strokeStyle = "rgba(200,210,235,0.12)";
+      ctx.lineWidth = px;
+      ctx.beginPath(); ctx.arc(c.x, c.y, b.def.orbit.r, 0, Math.PI * 2); ctx.stroke();
+    }
+    for (const b of B) {
+      if (b.type === "planet" || b.type === "moon") drawPlanet(b);
+      else if (b.type === "blackhole") drawBlackHole(b);
+      else if (b.type === "repulsor") drawRepulsor(b);
+      else if (b.type === "pulsar") drawPulsar(b);
+      else if (b.type === "wormhole") drawWormhole(b);
+    }
+
+    drawHole();
+    drawTee(px);
+
+    // last shot ghost
+    drawTrail(lastTrail, "rgba(111,224,210,0.16)", px);
+    drawTrail(trail, "rgba(111,224,210,0.55)", px);
+
+    // preview
+    if (preview.length) {
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      preview.forEach((p, k) => {
+        const a = 1 - k / (preview.length + 4);
+        ctx.globalAlpha = a;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 2.4 * px, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      if (previewHit) {
+        const c = { holed: "#ffc94d", rest: "#6fe0d2" }[previewHit.ev] || "#ff6b6b";
+        ctx.strokeStyle = c; ctx.lineWidth = 2 * px;
+        ctx.beginPath(); ctx.arc(previewHit.x, previewHit.y, 9 * px, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+
+    // ball
+    const bp = ball ? ball : (mode === "done" ? null : restPos(level, rest, simTime));
+    if (bp) {
+      const r = Math.max(PHYS.ballR, 4.5 * px);
+      const g = ctx.createRadialGradient(bp.x - r * 0.3, bp.y - r * 0.3, r * 0.1, bp.x, bp.y, r);
+      g.addColorStop(0, "#ffffff"); g.addColorStop(1, "#b9c4dd");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(bp.x, bp.y, r, 0, Math.PI * 2); ctx.fill();
+      if (mode === "aim" && !aim) {
+        const pulse = reduceMotion ? 0.5 : 0.5 + 0.5 * Math.sin(simTime * 4);
+        ctx.strokeStyle = `rgba(255,201,77,${0.25 + pulse * 0.4})`;
+        ctx.lineWidth = 1.5 * px;
+        ctx.beginPath(); ctx.arc(bp.x, bp.y, r + 7 * px + pulse * 3 * px, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+
+    // screen-space overlays
+    setScreenTransform();
+    drawLabels(B);
+    drawPulsarTimers(B);
+    if (aim) drawAimGauge(bp);
+    if (mode === "aim" && !aim && strokes === 0 && levelIdx === 0) {
+      const s = w2s(level.tee.x, level.tee.y);
+      ctx.fillStyle = "rgba(230,235,247,0.8)";
+      ctx.font = "600 13px 'IBM Plex Mono', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("drag anywhere · pull back · release", s.x, s.y + 34);
+    }
+  }
+
+  function drawTrail(t, color, px) {
+    if (t.length < 2) return;
+    ctx.strokeStyle = color; ctx.lineWidth = 2 * px; ctx.lineJoin = "round";
+    ctx.beginPath();
+    let pen = false;
+    for (const p of t) {
+      if (!p) { pen = false; continue; }
+      if (!pen) { ctx.moveTo(p.x, p.y); pen = true; } else ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  }
+
+  function drawPlanet(b) {
+    const col = b.def.color || "#8899cc";
+    const g = ctx.createRadialGradient(b.x - b.r * 0.35, b.y - b.r * 0.4, b.r * 0.1, b.x, b.y, b.r);
+    g.addColorStop(0, shade(col, 0.35)); g.addColorStop(0.7, col); g.addColorStop(1, shade(col, -0.45));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+    // atmosphere
+    ctx.strokeStyle = shade(col, 0.2) + "55"; ctx.lineWidth = b.r * 0.08;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 1.04, 0, Math.PI * 2); ctx.stroke();
+  }
+  function drawBlackHole(b) {
+    const g = ctx.createRadialGradient(b.x, b.y, b.def.horizon * 0.6, b.x, b.y, b.def.horizon * 2.6);
+    g.addColorStop(0, "rgba(255,170,90,0.0)");
+    g.addColorStop(0.35, "rgba(255,160,80,0.55)");
+    g.addColorStop(0.6, "rgba(200,90,160,0.18)");
+    g.addColorStop(1, "rgba(120,60,160,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.def.horizon * 2.6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#000";
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.def.horizon, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(255,190,120,0.9)"; ctx.lineWidth = 2 / view.s;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.def.horizon, 0, Math.PI * 2); ctx.stroke();
+  }
+  function drawRepulsor(b) {
+    const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r * 2.2);
+    g.addColorStop(0, "#fff1e6"); g.addColorStop(0.3, "#ff8a70"); g.addColorStop(0.55, "rgba(255,90,80,0.35)"); g.addColorStop(1, "rgba(255,80,80,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2.2, 0, Math.PI * 2); ctx.fill();
+    // outward chevrons
+    ctx.strokeStyle = "rgba(255,140,120,0.7)"; ctx.lineWidth = 2 / view.s;
+    const t = reduceMotion ? 0 : (simTime * 0.6) % 1;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const r0 = b.r * (1.6 + t * 1.2);
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const tip = { x: b.x + ca * (r0 + 8), y: b.y + sa * (r0 + 8) };
+      ctx.globalAlpha = 1 - t;
+      ctx.beginPath();
+      ctx.moveTo(b.x + ca * r0 - sa * 6, b.y + sa * r0 + ca * 6);
+      ctx.lineTo(tip.x, tip.y);
+      ctx.lineTo(b.x + ca * r0 + sa * 6, b.y + sa * r0 - ca * 6);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawPulsar(b) {
+    const on = b.active;
+    const glow = on ? 4.2 : 1.8;
+    const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r * glow);
+    g.addColorStop(0, "#ffffff"); g.addColorStop(0.3, on ? "#9fd8ff" : "#4d6790"); g.addColorStop(1, "rgba(120,180,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * glow, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = on ? "#e8f6ff" : "#7d8fb0";
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+    if (on) {
+      ctx.strokeStyle = "rgba(170,220,255,0.9)"; ctx.lineWidth = 3 / view.s;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 1.8, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  function drawWormhole(b) {
+    const hue = b.def.hue;
+    for (let k = 0; k < 4; k++) {
+      const a0 = (reduceMotion ? 0 : simTime * (1.5 + k * 0.4)) + k;
+      ctx.strokeStyle = `hsla(${hue + k * 18},90%,${65 - k * 6}%,${0.9 - k * 0.17})`;
+      ctx.lineWidth = 3 / view.s;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r * (1 - k * 0.2), a0, a0 + Math.PI * 1.4); ctx.stroke();
+    }
+    ctx.fillStyle = `hsla(${hue},80%,10%,0.9)`;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.3, 0, Math.PI * 2); ctx.fill();
+  }
+  function drawCloud(b) {
+    const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+    g.addColorStop(0, "rgba(170,120,230,0.30)"); g.addColorStop(0.75, "rgba(140,100,220,0.18)"); g.addColorStop(1, "rgba(120,90,200,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(190,150,255,0.25)"; ctx.lineWidth = 1 / view.s;
+    ctx.setLineDash([2 / view.s, 6 / view.s]);
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  function drawHole() {
+    const h = level.hole;
+    const gg = ctx.createRadialGradient(h.x, h.y, PHYS.holeR, h.x, h.y, PHYS.greenR);
+    gg.addColorStop(0, "rgba(255,201,77,0.16)"); gg.addColorStop(1, "rgba(255,201,77,0.03)");
+    ctx.fillStyle = gg;
+    ctx.beginPath(); ctx.arc(h.x, h.y, PHYS.greenR, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(255,201,77,0.3)"; ctx.lineWidth = 1 / view.s;
+    ctx.setLineDash([3 / view.s, 5 / view.s]);
+    ctx.beginPath(); ctx.arc(h.x, h.y, PHYS.greenR, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#020308";
+    ctx.beginPath(); ctx.arc(h.x, h.y, PHYS.holeR, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#ffc94d"; ctx.lineWidth = 2.5 / view.s;
+    ctx.beginPath(); ctx.arc(h.x, h.y, PHYS.holeR, 0, Math.PI * 2); ctx.stroke();
+    // flag drawn in screen space so it stays upright
+    setScreenTransform();
+    const s = w2s(h.x, h.y);
+    const pole = Math.max(26, PHYS.holeR * view.s * 2.4);
+    ctx.strokeStyle = "#e6ebf7"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x, s.y - pole); ctx.stroke();
+    const wave = reduceMotion ? 0 : Math.sin(simTime * 3) * 2;
+    ctx.fillStyle = "#ffc94d";
+    ctx.beginPath(); ctx.moveTo(s.x, s.y - pole); ctx.lineTo(s.x + 16, s.y - pole + 5 + wave); ctx.lineTo(s.x, s.y - pole + 11); ctx.fill();
+    setWorldTransform();
+  }
+  function drawTee(px) {
+    const t = level.tee;
+    ctx.strokeStyle = "rgba(111,224,210,0.45)"; ctx.lineWidth = 1.5 * px;
+    ctx.beginPath(); ctx.arc(t.x, t.y, 14 * px + PHYS.ballR, 0, Math.PI * 2); ctx.stroke();
+  }
+  function drawLabels(B) {
+    ctx.font = "600 11px 'IBM Plex Mono', monospace";
+    ctx.textAlign = "center";
+    for (const b of B) {
+      if (!b.def.label) continue;
+      const s = w2s(b.x, b.y);
+      const off = Math.max(b.r * view.s, 12) + 18;
+      const text = b.def.label.toUpperCase();
+      const wdt = ctx.measureText(text).width + 12;
+      ctx.fillStyle = "rgba(8,12,28,0.75)";
+      ctx.fillRect(s.x - wdt / 2, s.y + off - 12, wdt, 17);
+      ctx.fillStyle = "rgba(230,235,247,0.92)";
+      ctx.fillText(text, s.x, s.y + off);
+    }
+  }
+  function drawPulsarTimers(B) {
+    for (const b of B) {
+      if (b.type !== "pulsar") continue;
+      const ph = pulsarPhase(b.def, simTime);
+      const s = w2s(b.x, b.y);
+      const r = Math.max(b.r * view.s * 2.4, 16);
+      ctx.strokeStyle = ph.on ? "rgba(170,220,255,0.95)" : "rgba(140,160,200,0.6)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - ph.frac));
+      ctx.stroke();
+    }
+  }
+  function drawAimGauge(bp) {
+    const lv = launchVelocity();
+    ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.moveTo(aim.sx, aim.sy); ctx.lineTo(aim.cx, aim.cy); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.beginPath(); ctx.arc(aim.sx, aim.sy, 4, 0, Math.PI * 2); ctx.fill();
+    if (!lv || !bp) return;
+    const s = w2s(bp.x, bp.y);
+    const pct = Math.round(lv.power * 100);
+    const r = 26;
+    ctx.strokeStyle = "rgba(255,255,255,0.15)"; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = lv.power > 0.85 ? "#ff6b6b" : "#ffc94d";
+    ctx.beginPath(); ctx.arc(s.x, s.y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * lv.power); ctx.stroke();
+    ctx.fillStyle = "#e6ebf7"; ctx.font = "600 12px 'IBM Plex Mono', monospace"; ctx.textAlign = "center";
+    ctx.fillText(pct + "%", s.x, s.y - r - 8);
+  }
+
+  function shade(hex, amt) {
+    const n = parseInt(hex.slice(1), 16);
+    let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const f = (c) => Math.round(amt >= 0 ? c + (255 - c) * amt : c * (1 + amt));
+    r = f(r); g = f(g); b = f(b);
+    return "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+  }
+
+  function drawIcon(cv, kind) {
+    const g = cv.getContext("2d");
+    g.clearRect(0, 0, 56, 56);
+    const c = 28;
+    if (kind === "cup") {
+      g.fillStyle = "#020308"; g.beginPath(); g.arc(c, c + 8, 10, 0, 7); g.fill();
+      g.strokeStyle = "#ffc94d"; g.lineWidth = 2; g.beginPath(); g.arc(c, c + 8, 10, 0, 7); g.stroke();
+      g.strokeStyle = "#e6ebf7"; g.beginPath(); g.moveTo(c, c + 8); g.lineTo(c, 6); g.stroke();
+      g.fillStyle = "#ffc94d"; g.beginPath(); g.moveTo(c, 6); g.lineTo(c + 14, 11); g.lineTo(c, 16); g.fill();
+    } else if (kind === "planet" || kind === "moon") {
+      g.setLineDash([3, 4]); g.strokeStyle = "rgba(170,190,255,0.5)";
+      g.beginPath(); g.arc(c, c, 25, 0, 7); g.stroke(); g.setLineDash([]);
+      const gr = g.createRadialGradient(c - 5, c - 6, 2, c, c, 15);
+      gr.addColorStop(0, kind === "moon" ? "#f2f5fb" : "#a9c3f7"); gr.addColorStop(1, kind === "moon" ? "#7d869c" : "#2d4f99");
+      g.fillStyle = gr; g.beginPath(); g.arc(c, c, 15, 0, 7); g.fill();
+    } else if (kind === "blackhole") {
+      const gr = g.createRadialGradient(c, c, 6, c, c, 26);
+      gr.addColorStop(0, "rgba(255,160,80,0)"); gr.addColorStop(0.4, "rgba(255,160,80,0.7)"); gr.addColorStop(1, "rgba(150,60,160,0)");
+      g.fillStyle = gr; g.beginPath(); g.arc(c, c, 26, 0, 7); g.fill();
+      g.fillStyle = "#000"; g.beginPath(); g.arc(c, c, 10, 0, 7); g.fill();
+      g.strokeStyle = "#ffbe78"; g.lineWidth = 1.5; g.beginPath(); g.arc(c, c, 10, 0, 7); g.stroke();
+    } else if (kind === "repulsor") {
+      const gr = g.createRadialGradient(c, c, 0, c, c, 22);
+      gr.addColorStop(0, "#fff1e6"); gr.addColorStop(0.4, "#ff8a70"); gr.addColorStop(1, "rgba(255,80,80,0)");
+      g.fillStyle = gr; g.beginPath(); g.arc(c, c, 22, 0, 7); g.fill();
+    } else if (kind === "cloud") {
+      const gr = g.createRadialGradient(c, c, 0, c, c, 26);
+      gr.addColorStop(0, "rgba(170,120,230,0.7)"); gr.addColorStop(1, "rgba(120,90,200,0)");
+      g.fillStyle = gr; g.beginPath(); g.arc(c, c, 26, 0, 7); g.fill();
+    } else if (kind === "wormhole") {
+      for (let k = 0; k < 4; k++) {
+        g.strokeStyle = `hsla(${190 + k * 18},90%,${65 - k * 6}%,${0.9 - k * 0.17})`; g.lineWidth = 2.5;
+        g.beginPath(); g.arc(c, c, 20 - k * 4, k, k + 4.4); g.stroke();
+      }
+    } else if (kind === "pulsar") {
+      const gr = g.createRadialGradient(c, c, 0, c, c, 24);
+      gr.addColorStop(0, "#fff"); gr.addColorStop(0.35, "#9fd8ff"); gr.addColorStop(1, "rgba(120,180,255,0)");
+      g.fillStyle = gr; g.beginPath(); g.arc(c, c, 24, 0, 7); g.fill();
+      g.strokeStyle = "rgba(170,220,255,0.9)"; g.lineWidth = 2; g.beginPath(); g.arc(c, c, 14, -1.57, 2.5); g.stroke();
+    }
+  }
+
+  window.addEventListener("resize", resize);
+  resize();
+  loadLevel(0);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
