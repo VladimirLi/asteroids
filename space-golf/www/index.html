@@ -26,8 +26,9 @@
         <button id="tDaily"><span class="lbl">Daily Orbit</span><span class="sub" id="tDailySub">New hole today</span></button>
         <button id="tFree"><span class="lbl">Free Orbit</span><span class="sub">Endless random holes</span></button>
       </div>
-      <div class="menu-row small">
+      <div class="menu-row small three">
         <button id="tLog">Logbook</button>
+        <button id="tLocker">Locker<span class="dot" id="tLockerDot" hidden></span></button>
         <button id="tSettings">Settings</button>
       </div>
     </div>
@@ -51,8 +52,9 @@
 <section class="screen game" id="scr-game" hidden>
   <div class="hud" id="hud">
     <button class="icon" id="gPause" aria-label="Pause">❚❚</button>
+    <button class="icon" id="gRetry" aria-label="Restart hole">↺</button>
     <div class="hud-title"><span class="eyebrow" id="gNum"></span><span id="gName"></span></div>
-    <div class="hud-score"><span class="eyebrow">Strokes / Par</span><span id="gStrokes"></span></div>
+    <div class="hud-score"><span class="eyebrow">Strokes</span><span id="gStrokes"></span></div>
   </div>
   <div class="hud-bottom" id="hudBottom">
     <div id="gHint" class="hint"></div>
@@ -88,7 +90,9 @@
     <div class="star-row" id="rStars"><span>★</span><span>★</span><span>★</span></div>
     <h2 id="rTitle"></h2>
     <p id="rText"></p>
+    <div class="tags" id="rTags"></div>
     <p class="quip" id="rQuip"></p>
+    <button class="share" id="rShare">Share this shot</button>
     <div class="actions">
       <button id="rMenu">Holes</button>
       <button id="rRetry">Replay</button>
@@ -132,6 +136,16 @@
     <div class="stats" id="lStats"></div>
     <div class="ach-list" id="lList"></div>
     <div class="actions"><button class="primary" data-close>Close</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-locker" hidden>
+  <div class="card">
+    <span class="meta" id="lkMeta"></span>
+    <h2>Locker</h2>
+    <p class="sub">Balls and trails you have earned. Tap one to play with it.</p>
+    <div class="skin-grid" id="lkGrid"></div>
+    <div class="actions"><button class="primary" data-close>Done</button></div>
   </div>
 </div>
 

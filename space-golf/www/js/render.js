@@ -8,7 +8,10 @@ export class Renderer {
     this.cv = canvas;
     this.ctx = canvas.getContext("2d");
     this.W = 0; this.H = 0; this.dpr = 1;
-    this.view = { s: 1, rot: 0, cx: 0, cy: 0 };
+    this.view = { s: 1, rot: 0, cx: 0, cy: 0, zoom: 1, fx: 0, fy: 0 };
+    this.rings = [];
+    this.callouts = [];
+    this.flash = 0;
     this.level = null;
     this.sky = { hue: 222 };
     this.bg = null;
@@ -27,10 +30,18 @@ export class Renderer {
     this.bg = null;
   }
 
+  // Fixed-size rendering (share postcards).
+  setSize(w, h, dpr = 1) {
+    this.W = w; this.H = h; this.dpr = dpr;
+    this.cv.width = Math.round(w * dpr); this.cv.height = Math.round(h * dpr);
+    this.fit(); this.bg = null;
+  }
+
   setLevel(level, sky) {
     this.level = level;
     if (sky) this.sky = sky;
-    this.particles.length = 0;
+    this.particles.length = 0; this.rings.length = 0; this.callouts.length = 0; this.flash = 0;
+    this.view.zoom = 1;
     this.fit();
     this.bg = null;
   }
@@ -48,6 +59,7 @@ export class Renderer {
 
   w2s(x, y) {
     const v = this.view, c = Math.cos(v.rot), s = Math.sin(v.rot);
+    if (v.zoom !== 1) { x = v.fx + (x - v.fx) * v.zoom; y = v.fy + (y - v.fy) * v.zoom; }
     const dx = (x - this.level.w / 2) * v.s, dy = (y - this.level.h / 2) * v.s;
     return { x: v.cx + dx * c - dy * s, y: v.cy + dx * s + dy * c };
   }
@@ -57,7 +69,7 @@ export class Renderer {
   }
   worldTransform() {
     const v = this.view, d = this.dpr;
-    const c = Math.cos(v.rot) * v.s * d, s = Math.sin(v.rot) * v.s * d;
+    const c = Math.cos(v.rot) * v.s * v.zoom * d, s = Math.sin(v.rot) * v.s * v.zoom * d;
     const o = this.w2s(0, 0);
     const sx = this.shakeX || 0, sy = this.shakeY || 0;
     this.ctx.setTransform(c, s, -s, c, (o.x + sx) * d, (o.y + sy) * d);
@@ -116,6 +128,13 @@ export class Renderer {
       this.particles.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r, vx: 0, vy: 0, life: 1.0, age: 0, size: 2.5, color: "255,170,100", drag: 0, spiral: { cx: x, cy: y, a, r } });
     }
   }
+  ring(x, y, opts = {}) {
+    this.rings.push({ x, y, age: 0, life: opts.life || 0.7, max: opts.max || 120, color: opts.color || "255,210,110", w: opts.w || 4 });
+  }
+  callout(x, y, text, color = "255,214,120") {
+    this.callouts.push({ x, y, text, age: 0, life: 1.4, color });
+  }
+  flashScreen(a = 0.5) { if (!reduceMotion()) this.flash = Math.max(this.flash, a); }
   kick(amount) { if (!reduceMotion()) this.shake = Math.min(14, this.shake + amount); }
 
   updateFx(dt) {
@@ -133,6 +152,9 @@ export class Renderer {
         p.vx *= k; p.vy *= k; p.x += p.vx * dt; p.y += p.vy * dt;
       }
     }
+    for (let i = this.rings.length - 1; i >= 0; i--) { const r = this.rings[i]; r.age += dt; if (r.age >= r.life) this.rings.splice(i, 1); }
+    for (let i = this.callouts.length - 1; i >= 0; i--) { const c = this.callouts[i]; c.age += dt; if (c.age >= c.life) this.callouts.splice(i, 1); }
+    if (this.flash > 0) this.flash = Math.max(0, this.flash - dt * 2.2);
     if (this.shake > 0) {
       this.shake = Math.max(0, this.shake - dt * 40);
       this.shakeX = (Math.random() - 0.5) * this.shake; this.shakeY = (Math.random() - 0.5) * this.shake;
@@ -196,17 +218,21 @@ export class Renderer {
     this.teeMark(px);
 
     this.trail(st.ghost, "rgba(160,170,200,0.14)", px, 1.5);
-    this.trail(st.trail, "rgba(111,224,210,0.55)", px, 2);
+    if (st.extraTrails) for (const tr of st.extraTrails) this.glowTrail(tr, st.skin, px, 0.55);
+    this.glowTrail(st.trail, st.skin, px, 1);
 
     // preview
     const pv = st.preview;
     if (pv && pv.pts.length) {
       ctx.fillStyle = "rgba(255,255,255,0.9)";
       const n = pv.pts.length / 2;
+      const march = reduceMotion() ? 0 : (t * 6) % 1;
       for (let k = 0; k < n; k++) {
-        ctx.globalAlpha = 1 - k / (n + 4);
-        ctx.beginPath(); ctx.arc(pv.pts[2 * k], pv.pts[2 * k + 1], 2.4 * px, 0, 6.283); ctx.fill();
+        const pulse = 0.75 + 0.25 * Math.cos((k / 3 - t * 3) * Math.PI);
+        ctx.globalAlpha = (1 - k / (n + 4)) * pulse;
+        ctx.beginPath(); ctx.arc(pv.pts[2 * k], pv.pts[2 * k + 1], (2.2 + 0.6 * pulse) * px, 0, 6.283); ctx.fill();
       }
+      void march;
       ctx.globalAlpha = 1;
       if (pv.hit) {
         const c = { holed: "#ffc94d", rest: "#6fe0d2" }[pv.hit.ev] || "#ff6b6b";
@@ -216,6 +242,12 @@ export class Renderer {
       }
     }
 
+    // shockwave rings
+    for (const r of this.rings) {
+      const k = r.age / r.life, e = 1 - Math.pow(1 - k, 3);
+      ctx.strokeStyle = `rgba(${r.color},${(1 - k) * 0.9})`; ctx.lineWidth = r.w * (1 - k) * px + px;
+      ctx.beginPath(); ctx.arc(r.x, r.y, 10 + e * r.max, 0, 6.283); ctx.stroke();
+    }
     // particles
     for (const p of this.particles) {
       const a = 1 - p.age / p.life;
@@ -227,9 +259,16 @@ export class Renderer {
     const bp = st.ballPos;
     if (bp) {
       const r = Math.max(PHYS.ballR, 4.5 * px);
+      const sk = st.skin || { ball: ["#ffffff", "#b9c4dd"] };
+      if (sk.glow) {
+        const gl = ctx.createRadialGradient(bp.x, bp.y, r * 0.5, bp.x, bp.y, r * 4);
+        gl.addColorStop(0, `rgba(${sk.glow},0.55)`); gl.addColorStop(1, `rgba(${sk.glow},0)`);
+        ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(bp.x, bp.y, r * 4, 0, 6.283); ctx.fill();
+      }
       const g = ctx.createRadialGradient(bp.x - r * 0.3, bp.y - r * 0.3, r * 0.1, bp.x, bp.y, r);
-      g.addColorStop(0, "#ffffff"); g.addColorStop(1, "#b9c4dd");
+      g.addColorStop(0, sk.ball[0]); g.addColorStop(1, sk.ball[1]);
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bp.x, bp.y, r, 0, 6.283); ctx.fill();
+      if (sk.ring) { ctx.strokeStyle = sk.ring; ctx.lineWidth = 1.5 * px; ctx.beginPath(); ctx.arc(bp.x, bp.y, r * 1.1, 0, 6.283); ctx.stroke(); }
       if (st.mode === "aim" && !st.aiming) {
         const pulse = reduceMotion() ? 0.5 : 0.5 + 0.5 * Math.sin(t * 4);
         ctx.strokeStyle = `rgba(255,201,77,${0.25 + pulse * 0.45})`; ctx.lineWidth = 1.5 * px;
@@ -243,6 +282,65 @@ export class Renderer {
     this.pulsarTimers(W, t);
     this.flag(st);
     if (st.aim) this.gauge(st.aim, bp);
+    for (const c of this.callouts) {
+      const k = c.age / c.life, s2 = this.w2s(c.x, c.y);
+      const pop = k < 0.12 ? 0.7 + (k / 0.12) * 0.4 : 1.1 - Math.min(0.1, (k - 0.12));
+      ctx.save();
+      ctx.translate(s2.x, s2.y - 26 - k * 34); ctx.scale(pop, pop);
+      ctx.globalAlpha = k > 0.75 ? (1 - k) / 0.25 : 1;
+      ctx.font = "800 20px Syne, sans-serif"; ctx.textAlign = "center";
+      ctx.lineWidth = 5; ctx.strokeStyle = "rgba(6,9,22,0.85)"; ctx.strokeText(c.text, 0, 0);
+      ctx.fillStyle = `rgb(${c.color})`; ctx.fillText(c.text, 0, 0);
+      ctx.restore();
+    }
+    if (st.tutorial && bp) this.tutorialHand(bp, t);
+    if (this.flash > 0) { ctx.fillStyle = `rgba(255,236,190,${this.flash})`; ctx.fillRect(0, 0, this.W, this.H); }
+  }
+
+  // Animated "drag back and release" demonstration for first-time players.
+  tutorialHand(bp, t) {
+    const ctx = this.ctx, b = this.w2s(bp.x, bp.y), h = this.w2s(this.level.hole.x, this.level.hole.y);
+    const dx = h.x - b.x, dy = h.y - b.y, len = Math.hypot(dx, dy) || 1;
+    const ux = -dx / len, uy = -dy / len;              // pull direction: away from the cup
+    const cyc = (t % 2.4) / 2.4;
+    const startX = this.W / 2, startY = this.H * 0.55;
+    const pull = Math.min(this.W, this.H) * 0.12 * Math.min(1, cyc / 0.55);
+    const fx = startX + ux * pull, fy = startY + uy * pull;
+    const alpha = cyc < 0.8 ? 1 : (1 - cyc) / 0.2;
+    ctx.save(); ctx.globalAlpha = alpha * 0.9;
+    ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.setLineDash([4, 6]); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(fx, fy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(255,255,255,0.25)"; ctx.beginPath(); ctx.arc(startX, startY, 6, 0, 6.283); ctx.fill();
+    const press = cyc < 0.62 ? 1 : 0;
+    ctx.fillStyle = `rgba(255,201,77,${0.35 + 0.5 * press})`; ctx.strokeStyle = "#ffc94d"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(fx, fy, 16 - 4 * press, 0, 6.283); ctx.fill(); ctx.stroke();
+    ctx.font = "600 12px 'IBM Plex Mono', monospace"; ctx.textAlign = "center"; ctx.fillStyle = "#e6ebf7";
+    ctx.fillText(cyc < 0.62 ? "drag back" : "release", fx, fy + 34);
+    ctx.restore();
+  }
+
+  // Trail with an additive glow in the ball skin's colours.
+  glowTrail(arr, skin, px, alpha) {
+    if (!arr || arr.length < 6) return;
+    const ctx = this.ctx, rainbow = skin && skin.trail === "rainbow";
+    const col = skin ? skin.trail : "111,224,210";
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.lineJoin = "round"; ctx.lineCap = "round";
+    const n = arr.length / 3;
+    const seg = Math.max(1, Math.floor(n / 60));
+    for (const [w, a] of [[7, 0.10], [2.4, 0.7]]) {
+      ctx.lineWidth = w * px;
+      for (let i = 0; i < n - 1; i += seg) {
+        const j = Math.min(n - 1, i + seg);
+        if (arr[j * 3 + 2] === 1) continue;
+        const fade = 0.35 + 0.65 * (i / n);
+        const c = rainbow ? hslRGB((i * 6) % 360) : col;
+        ctx.strokeStyle = `rgba(${c},${a * fade * alpha})`;
+        ctx.beginPath(); ctx.moveTo(arr[i * 3], arr[i * 3 + 1]);
+        for (let k = i + 1; k <= j; k++) ctx.lineTo(arr[k * 3], arr[k * 3 + 1]);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   trail(arr, color, px, w) {
@@ -441,6 +539,10 @@ export class Renderer {
   }
 }
 
+function hslRGB(h) {
+  const f = (n) => { const k = (n + h / 30) % 12, a = 0.9 * Math.min(0.65, 0.35); return Math.round(255 * (0.65 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); };
+  return `${f(0)},${f(8)},${f(4)}`;
+}
 export function shade(hex, amt) {
   const n = parseInt(hex.slice(1), 16);
   let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;

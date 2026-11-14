@@ -6,6 +6,8 @@ import { save } from "./save.js";
 import * as A from "./audio.js";
 import { PROLOGUE, CHAPTER_STORY, QUIPS, SPEAKER } from "./story.js";
 import { dailyHole, dateKey, yesterdayKey } from "./daily.js";
+import { SKINS, skinUnlocked, currentSkin } from "./skins.js";
+import { shareText, share } from "./share.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("stage");
@@ -47,6 +49,7 @@ function nextAch() {
   if (!a) { achShowing = false; return; }
   achShowing = true;
   $("achName").textContent = a.name;
+  $("achToast").querySelector(".eyebrow").textContent = a.eyebrow || "Logbook entry";
   $("achToast").hidden = false;
   A.sfx("unlock"); A.haptic("success");
   setTimeout(() => { $("achToast").hidden = true; setTimeout(nextAch, 250); }, 2400);
@@ -164,7 +167,10 @@ function renderTitle() {
   $("tPlay").textContent = done === 0 ? "Play" : nh ? `Continue · ${CHAPTERS[nh.ci].holes[nh.hi].name}` : "Replay a chapter";
   $("tProgress").innerHTML = `<b>${save.totalStars()}</b> / ${TOTAL_STARS} stars · ${done} / ${TOTAL_HOLES} cups lit`;
   const today = save.data.daily[dateKey()];
-  $("tDailySub").textContent = today ? `Today: ${today} strokes · streak ${save.data.streak}` : "A new hole today";
+  const mid = new Date(); mid.setHours(24, 0, 0, 0);
+  const left = Math.max(0, mid - new Date()), hh = Math.floor(left / 3.6e6), mm = Math.floor((left % 3.6e6) / 6e4);
+  $("tDailySub").textContent = today ? `Done in ${today} · next in ${hh}h ${mm}m` : save.data.streak && save.data.lastDaily === yesterdayKey() ? `Keep your ${save.data.streak}-day streak` : "A new hole today";
+  $("tLockerDot").hidden = save.seen("skins:" + unlockedSkinIds().join(","));
 }
 $("tPlay").onclick = () => {
   const nh = nextHole();
@@ -180,6 +186,58 @@ $("tDaily").onclick = () => startDaily();
 $("tFree").onclick = () => startFree();
 $("tSettings").onclick = () => openOv("settings");
 $("tLog").onclick = openLog;
+$("tLocker").onclick = openLocker;
+
+// ---------------------------------------------------------------- locker (ball skins)
+function unlockedSkinIds() { return SKINS.filter((k) => skinUnlocked(k, save)).map((k) => k.id); }
+function openLocker() {
+  save.markSeen("skins:" + unlockedSkinIds().join(","));
+  $("tLockerDot").hidden = true;
+  const cur = currentSkin(save).id;
+  $("lkMeta").textContent = `${unlockedSkinIds().length} of ${SKINS.length} unlocked`;
+  const grid = $("lkGrid");
+  grid.innerHTML = "";
+  SKINS.forEach((k) => {
+    const open = skinUnlocked(k, save);
+    const b = document.createElement("button");
+    b.className = "skin" + (open ? "" : " locked") + (k.id === cur ? " sel" : "");
+    b.innerHTML = `<canvas width="108" height="108"></canvas><b>${k.name}</b><small>${open ? (k.id === cur ? "In play" : "Tap to use") : k.desc}</small>`;
+    drawSkinIcon(b.querySelector("canvas"), k, open);
+    b.onclick = () => {
+      if (!open) { toastMsg(k.desc, "bad"); return; }
+      save.setSetting("skin", k.id); A.sfx("star", { i: 1 }); A.haptic("light"); openLocker();
+    };
+    grid.appendChild(b);
+  });
+  openOv("locker");
+}
+function drawSkinIcon(cv, k, open) {
+  const g = cv.getContext("2d"), c = 54;
+  g.clearRect(0, 0, 108, 108);
+  // little comet: trail arc then ball
+  for (let i = 0; i < 18; i++) {
+    const a = Math.PI * 0.95 + i * 0.07, r = 36;
+    const col = k.trail === "rainbow" ? `hsl(${i * 20},90%,65%)` : `rgb(${k.trail})`;
+    g.globalAlpha = (open ? 0.9 : 0.35) * (i / 18);
+    g.fillStyle = col; g.beginPath(); g.arc(c + Math.cos(a) * r, c + 10 + Math.sin(a) * r * 0.6, 2 + i * 0.18, 0, 7); g.fill();
+  }
+  g.globalAlpha = open ? 1 : 0.4;
+  if (k.glow) { const gl = g.createRadialGradient(c + 36, c + 4, 4, c + 36, c + 4, 26); gl.addColorStop(0, `rgba(${k.glow},0.6)`); gl.addColorStop(1, `rgba(${k.glow},0)`); g.fillStyle = gl; g.beginPath(); g.arc(c + 36, c + 4, 26, 0, 7); g.fill(); }
+  const gr = g.createRadialGradient(c + 32, c, 2, c + 36, c + 4, 13);
+  gr.addColorStop(0, k.ball[0]); gr.addColorStop(1, k.ball[1]);
+  g.fillStyle = gr; g.beginPath(); g.arc(c + 36, c + 4, 13, 0, 7); g.fill();
+  if (k.ring) { g.strokeStyle = k.ring; g.lineWidth = 2; g.beginPath(); g.arc(c + 36, c + 4, 14.5, 0, 7); g.stroke(); }
+  g.globalAlpha = 1;
+}
+function checkNewSkins(before) {
+  const now = unlockedSkinIds();
+  const fresh = now.filter((id) => !before.includes(id));
+  fresh.forEach((id, i) => setTimeout(() => {
+    const k = SKINS.find((x) => x.id === id);
+    achQueue.push({ name: k.name, eyebrow: "New ball unlocked · see Locker" });
+    if (!achShowing) nextAch();
+  }, 400 + i * 100));
+}
 $("pSettings").onclick = () => openOv("settings");
 $("setCredits").onclick = () => openOv("credits");
 $("setReset").onclick = async () => {
@@ -243,7 +301,7 @@ function renderHoles() {
     const isNext = nh && nh.ci === viewChapter && nh.hi === hi;
     b.className = "hole-tile" + (open ? "" : " locked") + (isNext ? " next" : "");
     const stars = [0, 1, 2].map((k) => `<span class="${rec && rec.stars > k ? "" : "off"}">★</span>`).join("");
-    b.innerHTML = `<span class="n">${hi + 1}</span><span class="nm">${open ? h.name : "Locked"}<br>Par ${h.par}${rec ? ` · best ${rec.best}` : ""}</span><span class="st">${stars}</span>`;
+    b.innerHTML = `${rec && rec.best === 1 ? '<span class="ace">ACE</span>' : ""}<span class="n">${hi + 1}</span><span class="nm">${open ? h.name : "Locked"}<br>Par ${h.par}${rec ? ` · best ${rec.best}` : ""}</span><span class="st">${stars}</span>`;
     b.onclick = () => { if (!open) { toastMsg("Finish the hole before it", "bad"); return; } startHole(viewChapter, hi); };
     grid.appendChild(b);
   });
@@ -287,11 +345,13 @@ function loadGame(opts) {
     ...opts, world: new World(L), t: 0, rest: null, ball: null, strokes: 0, mode: "brief",
     trail: [], ghost: game && game.level === L ? game.lastTrail || game.trail : [], lastTrail: null,
     aim: null, preview: null, penalized: false, shotStats: null, pulseOn: [],
+    allTrails: [], fates: [], tags: new Set(), timeScale: 1, slowTarget: 1, zoomTarget: 1,
+    skin: currentSkin(save), tutorial: opts.kind === "campaign" && opts.ci === 0 && opts.hi === 0 && !save.seen("tutorial"),
   };
   show("game");
   R.setLevel(L, opts.sky);
   $("gName").textContent = L.name;
-  $("gNum").textContent = opts.kind === "campaign" ? `Ch ${opts.ci + 1} · Hole ${opts.hi + 1} of ${CHAPTERS[opts.ci].holes.length}`
+  $("gNum").textContent = opts.kind === "campaign" ? `Ch ${opts.ci + 1} · Hole ${opts.hi + 1}/${CHAPTERS[opts.ci].holes.length}`
     : opts.kind === "daily" ? `Daily Orbit · ${opts.dateKey}` : "Free Orbit";
   $("gHint").innerHTML = L.hint || "";
   $("gHint").hidden = !L.hint;
@@ -301,7 +361,7 @@ function loadGame(opts) {
   showBrief();
 }
 function updateStrokes() {
-  $("gStrokes").textContent = `${game.strokes} / ${game.level.par}`;
+  $("gStrokes").innerHTML = `${game.strokes}<small> / par ${game.level.par}</small>`;
   $("gStrokes").classList.toggle("over", game.strokes > game.level.par);
 }
 
@@ -330,6 +390,13 @@ function pause() {
 }
 function resume() { closeOv("pause"); }
 $("gPause").onclick = pause;
+$("gRetry").onclick = () => {
+  if (!game || overlays.length) return;
+  const keep = { ...game, ghost: game.trail.length ? game.trail : game.ghost };
+  loadGame(keep);
+  closeOv("brief"); game.mode = "aim";
+  toastMsg("Fresh start", "");
+};
 $("pResume").onclick = resume;
 $("pRestart").onclick = () => { closeOv("pause"); loadGame({ ...game, ghost: game.trail }); };
 $("pQuit").onclick = () => { closeOv("pause"); leaveGame(); };
@@ -381,7 +448,8 @@ function shoot(lv) {
   game.trail = [];
   game.mode = "fly";
   game.flyTime = 0;
-  game.shotStats = { bounces: 0, maxSpeed: 0 };
+  game.shotStats = { bounces: 0, maxSpeed: 0, launchSpeed: Math.hypot(lv.vx, lv.vy), graze: {}, inCloud: false, cloudBrake: false, asteroid: false, bumper: false, warped: false, sparkT: 0 };
+  if (game.tutorial) { game.tutorial = false; save.markSeen("tutorial"); }
   save.count("shots");
   A.sfx("launch", { power: lv.power }); A.haptic("light");
   const p = restPos(game.world, game.from, game.t);
@@ -439,22 +507,65 @@ function handleShotEvents(ball) {
       A.sfx("bounce", { impact: ball.impact }); A.haptic(ball.impact > 250 ? "medium" : "light");
       game.shotStats.bounces++;
       R.burst(ball.x, ball.y, { n: 6, speed: 60, color: "220,220,230", life: 0.4 });
+      game.shotStats.asteroid = true;
       if (ball.impact > 300) R.kick(3);
     } else if (ev === "bump") {
-      A.sfx("bump"); A.haptic("light"); game.shotStats.bounces++;
+      A.sfx("bump"); A.haptic("light"); game.shotStats.bounces++; game.shotStats.bumper = true;
       R.burst(ball.x, ball.y, { n: 8, speed: 90, color: "255,140,120", life: 0.4 });
     } else if (ev === "warp") {
       A.sfx("warp"); A.haptic("medium");
       if (save.count("warps") >= 25) award("warp");
       R.burst(ball.x, ball.y, { n: 16, speed: 120, color: "120,220,255", life: 0.6 });
       game.trail.push(ball.x, ball.y, 1);
+      if (!game.shotStats.warped) R.callout(ball.x, ball.y, "Wormhole!", "140,225,255");
+      game.shotStats.warped = true;
+      R.ring(ball.x, ball.y, { color: "120,220,255", max: 70, life: 0.5 });
     } else if (ev === "lip") {
       A.sfx("lip"); toastMsg("Lipped out: too fast", "bad");
     }
   }
   ball.events.length = 0;
-  const sp = Math.hypot(ball.vx, ball.vy);
-  if (sp > game.shotStats.maxSpeed) game.shotStats.maxSpeed = sp;
+  const st = game.shotStats, sp = Math.hypot(ball.vx, ball.vy);
+  if (sp > st.maxSpeed) st.maxSpeed = sp;
+  // trick detection: black-hole grazes, slingshots, nebula braking
+  const W = game.world, B = game.level.bodies;
+  for (let i = 0; i < B.length; i++) {
+    const b = B[i];
+    if (b.type === "blackhole") {
+      const d = Math.hypot(ball.x - W.x[i], ball.y - W.y[i]);
+      if (d < b.horizon + 22 && !st.graze[i]) {
+        st.graze[i] = 1;
+        R.callout(ball.x, ball.y, "Close call!", "255,170,110"); A.haptic("medium");
+        game.slowPulse = 0.35;
+      }
+    } else if (b.type === "cloud") {
+      const inside = Math.hypot(ball.x - W.x[i], ball.y - W.y[i]) < b.r;
+      if (inside && !st.inCloud) st.cloudEnter = sp;
+      if (!inside && st.inCloud && st.cloudEnter - sp > 120) st.cloudBrake = true;
+      st.inCloud = inside;
+    }
+  }
+  if (!st.sling && sp > st.launchSpeed + 260 && sp > 520) {
+    st.sling = true; R.callout(ball.x, ball.y, "Slingshot!", "255,214,120"); A.haptic("light");
+  }
+  // skin sparks
+  const sk = game.skin;
+  if (sk.sparks && (st.sparkT += PHYS.dt) > 0.05) {
+    st.sparkT = 0;
+    const col = sk.sparks === "rainbow" ? `${120 + Math.floor(Math.random() * 135)},${120 + Math.floor(Math.random() * 135)},255` : sk.sparks;
+    R.burst(ball.x, ball.y, { n: 1, speed: 25, color: col, life: 0.5, size: 2 });
+  }
+}
+
+function collectTags(holed) {
+  const st = game.shotStats, T = game.tags;
+  if (st.warped) T.add("Wormhole");
+  if (Object.keys(st.graze).length) T.add("Close call");
+  if (st.sling) T.add("Slingshot");
+  if (st.asteroid && holed) T.add("Bank shot");
+  if (st.bumper) T.add("Bumper");
+  if (st.cloudBrake || (st.inCloud && holed)) T.add("Nebula brake");
+  if (game.flyTime > 9) T.add("Long haul");
 }
 
 function handleEnd(ev) {
@@ -462,12 +573,22 @@ function handleEnd(ev) {
   if (game.shotStats.bounces >= 4) award("pinball");
   if (game.shotStats.maxSpeed >= 900) award("fast");
   btnReset.hidden = true;
+  game.fates.push(ev);
+  collectTags(ev === "holed");
+  if (game.trail.length) game.allTrails.push(game.trail);
   if (ev === "holed") {
-    game.rest = { x: game.level.hole.x, y: game.level.hole.y };
+    const h = game.level.hole;
+    game.rest = { x: h.x, y: h.y };
     game.ball = null; game.mode = "done";
-    A.sfx("holed"); A.haptic("success");
-    R.burst(game.level.hole.x, game.level.hole.y, { n: 40, speed: 220, color: "255,210,110", life: 1.1, essential: true });
-    R.kick(4);
+    const ace = game.strokes === 1;
+    A.sfx("holed"); if (ace) A.sfx("ace"); A.haptic("success");
+    R.burst(h.x, h.y, { n: ace ? 70 : 40, speed: ace ? 300 : 220, color: "255,210,110", life: 1.2, essential: true });
+    R.ring(h.x, h.y, { max: ace ? 260 : 160, life: 0.9, w: 6 });
+    R.ring(h.x, h.y, { max: ace ? 160 : 90, life: 0.6, color: "255,255,255", w: 3 });
+    if (ace) { R.flashScreen(0.55); R.callout(h.x, h.y, "HOLE IN ONE", "255,214,120"); }
+    R.kick(ace ? 7 : 4);
+    if (game.penalized && game.strokes <= game.level.par) game.tags.add("Comeback");
+    if (ace) game.tags.add("Ace");
     finishHole();
   } else if (ev === "rest") {
     const body = game.level.bodies[b.rest.i];
@@ -493,6 +614,7 @@ function scoreName(n, par) {
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 function finishHole() {
+  const skinsBefore = unlockedSkinIds();
   const L = game.level, n = game.strokes, par = L.par;
   save.count("holed");
   if (n === 1) { if (save.count("aces") >= 10) award("ace10"); award("ace"); }
@@ -518,6 +640,12 @@ function finishHole() {
     if (save.count("freeplay") >= 10) award("free10");
   }
   game.chapterJustDone = chapterJustDone;
+  game.stars = stars;
+  checkNewSkins(skinsBefore);
+  const order = ["Ace", "Slingshot", "Wormhole", "Close call", "Bank shot", "Bumper", "Nebula brake", "Long haul", "Comeback"];
+  const tags = order.filter((t) => game.tags.has(t));
+  $("rTags").innerHTML = tags.map((t, i) => `<span class="tag" style="animation-delay:${0.9 + i * 0.12}s">${t}</span>`).join("");
+  $("rShare").textContent = game.kind === "daily" ? "Share today's result" : n === 1 ? "Share this hole in one" : "Share this shot";
   $("rMeta").textContent = $("gNum").textContent;
   $("rTitle").textContent = scoreName(n, par);
   $("rText").textContent = text;
@@ -533,7 +661,47 @@ function finishHole() {
     stars$.forEach((s, k) => { if (k < stars) setTimeout(() => { s.classList.add("on"); A.sfx("star", { i: k }); A.haptic("light"); }, 250 + k * 280); });
   }, 900);
 }
-$("rRetry").onclick = () => { closeOv("result"); loadGame({ ...game, ghost: game.trail }); };
+$("rRetry").onclick = () => { closeOv("result"); loadGame({ ...game, ghost: game.allTrails.length ? game.allTrails[game.allTrails.length - 1] : game.ghost }); closeOv("brief"); game.mode = "aim"; };
+$("rShare").onclick = async () => {
+  const g = game;
+  const order = ["Ace", "Slingshot", "Wormhole", "Close call", "Bank shot", "Bumper", "Nebula brake", "Long haul", "Comeback"];
+  const text = shareText({
+    kind: g.kind, levelName: g.level.name, holeLabel: g.kind === "campaign" ? `Chapter ${g.ci + 1}, hole ${g.hi + 1}` : "",
+    strokes: g.strokes, par: g.level.par, stars: g.stars, shots: g.fates, tags: order.filter((t) => g.tags.has(t)),
+    dateKey: g.dateKey, streak: save.data.streak,
+  });
+  const card = postcard(g);
+  const r = await share(text, card);
+  if (r === "copied") toastMsg("Result copied. Paste it anywhere", "good");
+  else if (r === "failed") toastMsg("Sharing isn't available here", "bad");
+};
+
+// A shareable image of the hole with every shot drawn on it.
+function postcard(g) {
+  const cv = document.createElement("canvas");
+  const P = new Renderer(cv);
+  P.insets = { top: 230, bottom: 250 };
+  P.setSize(1080, 1350, 1);
+  P.setLevel(g.level, g.sky);
+  P.setSize(1080, 1350, 1);
+  P.draw({ world: g.world, t: g.t, mode: "done", trail: [], extraTrails: g.allTrails, skin: g.skin, ballPos: null });
+  const c = P.ctx;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  const top = c.createLinearGradient(0, 0, 0, 260); top.addColorStop(0, "rgba(7,11,26,0.95)"); top.addColorStop(1, "rgba(7,11,26,0)");
+  c.fillStyle = top; c.fillRect(0, 0, 1080, 260);
+  const bot = c.createLinearGradient(0, 1080, 0, 1350); bot.addColorStop(0, "rgba(7,11,26,0)"); bot.addColorStop(1, "rgba(7,11,26,0.97)");
+  c.fillStyle = bot; c.fillRect(0, 1080, 1080, 270);
+  c.fillStyle = "#ffc94d"; c.font = "600 30px 'IBM Plex Mono', monospace"; c.textAlign = "left";
+  c.fillText(g.kind === "daily" ? `DAILY ORBIT · ${g.dateKey}` : g.kind === "free" ? "FREE ORBIT" : `CHAPTER ${g.ci + 1} · HOLE ${g.hi + 1}`, 64, 92);
+  c.fillStyle = "#ffffff"; c.font = "800 76px Syne, sans-serif"; c.fillText(g.level.name, 60, 172);
+  c.font = "800 92px Syne, sans-serif"; c.fillStyle = "#ffd98a";
+  c.fillText(g.strokes === 1 ? "Hole in one" : `${g.strokes} strokes`, 60, 1220);
+  c.font = "600 54px 'IBM Plex Mono', monospace"; c.fillStyle = "#ffc94d"; c.textAlign = "right";
+  c.fillText("★".repeat(g.stars) + "☆".repeat(3 - g.stars), 1020, 1216);
+  c.textAlign = "left"; c.fillStyle = "#aab4d4"; c.font = "400 30px 'IBM Plex Mono', monospace";
+  c.fillText(`Par ${g.level.par} · Perihelion Golf`, 64, 1282);
+  return cv;
+}
 $("rMenu").onclick = () => { closeOv("result"); leaveGame(); };
 $("rNext").onclick = () => {
   closeOv("result");
@@ -631,6 +799,7 @@ async function keepAwake() {
   try { if (!wakeLock && navigator.wakeLock && !document.hidden) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => (wakeLock = null)); } } catch (e) {}
 }
 
+const reduceMotionPref = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 // ---------------------------------------------------------------- main loop
 let last = performance.now(), acc = 0;
 function frame(now) {
@@ -639,7 +808,26 @@ function frame(now) {
   if (screen === "game" && game) {
     const running = !overlays.length && game.mode !== "brief";
     if (running) {
-      acc += dt;
+      // cinematic slow motion: predict whether the flying ball is about to drop
+      let slow = 1, zoom = 1;
+      if (game.mode === "fly" && game.ball) {
+        const probe = { ...game.ball, events: [] };
+        let t2 = game.t;
+        for (let k = 0; k < 66; k++) {
+          t2 += PHYS.dt;
+          const ev = step(game.world, probe, t2);
+          if (ev === "holed") { slow = 0.28; zoom = 1.55; break; }
+          if (ev) break;
+        }
+        game.world.at(game.t);
+      }
+      if (game.slowPulse > 0) { game.slowPulse -= dt; slow = Math.min(slow, 0.45); }
+      if (game.mode === "done") { zoom = 1.55; slow = 1; }
+      if (reduceMotionPref()) { slow = 1; zoom = 1; }
+      game.timeScale += (slow - game.timeScale) * Math.min(1, dt * 10);
+      R.view.zoom += (zoom - R.view.zoom) * Math.min(1, dt * (zoom > R.view.zoom ? 4 : 2));
+      R.view.fx = game.level.hole.x; R.view.fy = game.level.hole.y;
+      acc += dt * game.timeScale;
       while (acc >= PHYS.dt) {
         acc -= PHYS.dt;
         game.t += PHYS.dt;
@@ -665,7 +853,9 @@ function frame(now) {
       if (game.aim) computePreview();
       R.updateFx(dt);
       const ballPos = game.ball ? game.ball : game.mode === "done" ? null : restPos(game.world, game.rest, game.t);
-      R.draw({ world: game.world, t: game.t, mode: game.mode, aim: game.aim, aiming: !!game.aim, preview: game.preview, trail: game.trail, ghost: game.ghost, ballPos });
+      if (game.mode !== "done" && game.mode !== "fly" && R.view.zoom > 1.001) R.view.zoom += (1 - R.view.zoom) * Math.min(1, dt * 3);
+      R.draw({ world: game.world, t: game.t, mode: game.mode, aim: game.aim, aiming: !!game.aim, preview: game.preview, trail: game.trail, ghost: game.ghost, ballPos,
+        skin: game.skin, tutorial: game.tutorial && game.mode === "aim" && !game.aim && !overlays.length });
     }
   } else {
     menuScene.draw(dt);
@@ -681,6 +871,7 @@ window.__pg = {
   waitUntil(t) { return game && game.t >= t; },
   w2s: (x, y) => R.w2s(x, y),
   play(ci, hi) { save.markSeen("prologue"); CHAPTERS.forEach((c) => save.markSeen("open-" + c.id)); closeAllOverlays(); startHole(ci, hi); },
+  postcard() { return game ? postcard(game).toDataURL("image/png") : null; },
   save,
 };
 

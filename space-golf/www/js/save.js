@@ -50,6 +50,7 @@ export const save = {
     data.daily[dateKey] = prev ? Math.min(prev, strokes) : strokes;
     if (data.lastDaily !== dateKey) {
       data.streak = data.lastDaily === yesterdayKey ? data.streak + 1 : 1;
+      data.bestStreak = Math.max(data.bestStreak || 0, data.streak);
       data.lastDaily = dateKey;
     }
     persist();

@@ -220,6 +220,12 @@ export function sfx(name, o = {}) {
       break;
     }
     case "star": bell(mtof(79 + (o.i || 0) * 4), t, 0.14, sfxBus); break;
+    case "ace": {
+      // fanfare: rising arpeggio into a held major chord
+      [60, 64, 67, 72, 76, 79, 84].forEach((n, k) => bell(mtof(n), t + 0.35 + k * 0.06, 0.08, sfxBus));
+      [72, 76, 79].forEach((n) => { const g = tone("triangle", mtof(n), mtof(n), t + 0.85, 1.4, 0.06); g.connect(reverb); });
+      break;
+    }
     case "swallowed": {
       tone("sawtooth", 260, 30, t, 1.1, 0.12);
       noise(t, 1.0, 0.18, "lowpass", 1500, 80, 2);

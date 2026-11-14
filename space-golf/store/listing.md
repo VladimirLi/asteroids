@@ -25,9 +25,14 @@ Every hole has been checked by computer to make sure it can be holed in one. If 
 A NEW HOLE EVERY DAY
 Daily Orbit builds a fresh hole each day. Everyone gets the same one, so you can compare scores with friends and keep your streak going. Free Orbit gives you endless random holes when you want one more.
 
-MADE TO BE PLAYED
+SHOTS WORTH SHOWING OFF
+Land a hole in one and time slows as the ball drops in. Slingshots, close calls with black holes, wormhole shortcuts and bank shots are called out as they happen. Share any shot as an image of its actual path, or share your Daily Orbit as a spoiler-free emoji result.
+
+COLLECT AND COME BACK
+• Unlock 9 balls and trails: Ember, Comet Ice, Nebula, Spectrum, Gold Standard and more
 • Earn up to three stars on every hole
 • 17 logbook entries to collect
+• One-tap restart for that one more try
 • Music and sound generated live on your device
 • Plays fully offline
 • One-handed portrait play, or landscape

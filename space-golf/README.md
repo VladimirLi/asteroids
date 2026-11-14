@@ -5,7 +5,8 @@ Space mini-golf for Android. You bend shots around planets, black holes, wormhol
 - 36 handcrafted holes in 4 chapters, each verified by a solver to be holeable in one
 - Story told by ORRERY, the course's caretaker computer
 - Daily Orbit (one generated hole per day, the same for everyone) and endless Free Orbit
-- Stars, best scores, 17 logbook achievements, daily streaks
+- Stars, best scores, 17 logbook achievements, daily streaks, 9 unlockable balls and trails
+- Slow-motion finishes, trick-shot callouts and tags, shareable emoji results and shot postcards
 - Music and sound effects synthesized live with Web Audio (no audio files)
 - Fully offline: no ads, no tracking, no network requests
 
@@ -20,6 +21,8 @@ www/                  the game (plain ES modules, no build step)
   js/audio.js         procedural music, sound effects, haptics
   js/daily.js         Daily / Free Orbit generator with on-device validation
   js/save.js          local save data
+  js/skins.js         unlockable balls and trails
+  js/share.js         share text and postcard sharing (set STORE_URL once live)
   js/story.js         all story text
 android/              Capacitor 8 Android project (target SDK 36)
 tools/                solver, playthrough test, asset and screenshot generators
