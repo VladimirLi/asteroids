@@ -483,12 +483,12 @@ function computePreview() {
     s.events.length = 0;
     if (!warped) { const d = Math.hypot(s.x - px, s.y - py); dist += d; acc2 += d; }
     px = s.x; py = s.y;
-    if (warped && !game.guided && !game.guide) cap = Math.min(cap, dist + 130);      // only a glimpse past a wormhole
+    if (warped && !game.guided && !game.guide) cap = Math.min(cap, dist + 230);      // only a glimpse past a wormhole
     if (acc2 >= 15 || warped) { pts.push(s.x, s.y); acc2 = 0; }
     if (ev) { hit = { ev, x: s.x, y: s.y }; break; }
   }
   game.world.at(game.t);
-  game.preview = { pts, hit, label: game.guided || !!game.guide || game.misses >= 3 };
+  game.preview = { pts, hit, label: game.guided || !!game.guide || game.misses >= 3 || !!game.rest };   // chips from a landing always show the cue
 }
 
 function shoot(lv, demo = false) {
@@ -735,7 +735,7 @@ function handleEnd(ev) {
     save.count("swallowed"); award("swallowed");
     penalty("Swallowed: +1 penalty", "swallowed");
   } else if (ev === "lost") miss(game.shotStats.lipped ? "Too fast for the cup. Pull back less" : game.near.d < 70 ? "So close. Ball recalled" : game.shotStats.launchSpeed > 0.8 * PHYS.maxSpeed ? "Too hard: it left the course. Pull back less" : "Lost in space. Ball recalled", "lost");
-  else if (ev === "orbit") miss(game.shotStats.lipped ? "Too fast for the cup. Ball recalled" : game.near.d < 70 ? "So close. Ball recalled" : game.shotStats.launchSpeed < 0.4 * PHYS.maxSpeed ? "Too soft: it ran out of speed. Ball recalled" : "Drifting with nowhere to land. Ball recalled", "orbit");
+  else if (ev === "orbit") miss(game.shotStats.lipped ? "Too fast for the cup. Ball recalled" : game.near.d < 70 ? "So close. Ball recalled" : game.shotStats.inCloud ? "The nebula ate its speed. Ball recalled" : game.shotStats.launchSpeed < 0.4 * PHYS.maxSpeed ? "Too soft: it ran out of speed. Ball recalled" : "Drifting with nowhere to land. Ball recalled", "orbit");
 }
 
 // ---------------------------------------------------------------- results
