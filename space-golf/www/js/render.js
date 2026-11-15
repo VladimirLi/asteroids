@@ -228,10 +228,24 @@ export class Renderer {
     if (st.extraTrails) for (const tr of st.extraTrails) this.glowTrail(tr, st.skin, px, 0.55);
     this.glowTrail(st.trail, st.skin, px, st.aiming ? 0.35 : 1);
 
+    // demo guide: the launch direction and power of the line just shown, so it can be copied
+    if (st.guide && st.ballPos && st.mode === "aim") {
+      const g = st.guide, b = st.ballPos, len = (70 + 90 * g.power) * px, a = Math.atan2(g.vy, g.vx);
+      const ex = b.x + Math.cos(a) * len, ey = b.y + Math.sin(a) * len;
+      ctx.strokeStyle = "rgba(255,201,77,0.95)"; ctx.fillStyle = "rgba(255,201,77,0.95)"; ctx.lineWidth = 3 * px; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(b.x + Math.cos(a) * 14 * px, b.y + Math.sin(a) * 14 * px); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ex + Math.cos(a) * 10 * px, ey + Math.sin(a) * 10 * px);
+      ctx.lineTo(ex + Math.cos(a + 2.5) * 10 * px, ey + Math.sin(a + 2.5) * 10 * px);
+      ctx.lineTo(ex + Math.cos(a - 2.5) * 10 * px, ey + Math.sin(a - 2.5) * 10 * px); ctx.closePath(); ctx.fill();
+      ctx.font = `700 ${13 * px}px 'IBM Plex Mono', monospace`; ctx.textAlign = "center";
+      ctx.lineWidth = 4 * px; ctx.strokeStyle = "rgba(6,9,22,0.9)";
+      const lx = ex + Math.cos(a) * 30 * px, ly = ey + Math.sin(a) * 30 * px + 4 * px, txt = Math.round(g.power * 100) + "%";
+      ctx.strokeText(txt, lx, ly); ctx.fillText(txt, lx, ly);
+    }
     // preview
     const pv = st.preview;
     if (pv && pv.pts.length) {
-      const goesIn = pv.hit && pv.hit.ev === "holed";
+      const goesIn = pv.label && pv.hit && pv.hit.ev === "holed";   // the gold "goes in" cue is help, not the default
       ctx.fillStyle = goesIn ? "rgba(255,210,90,1)" : "rgba(255,255,255,0.95)";
       const n = pv.pts.length / 2;
       const march = reduceMotion() ? 0 : (t * 6) % 1;
@@ -242,7 +256,7 @@ export class Renderer {
       }
       void march;
       ctx.globalAlpha = 1;
-      if (pv.hit) {
+      if (pv.hit && (pv.label || pv.hit.ev !== "holed")) {
         const c = { holed: "#ffc94d", rest: "#6fe0d2" }[pv.hit.ev] || "#ff6b6b";
         ctx.strokeStyle = c; ctx.lineWidth = 2.5 * px;
         ctx.beginPath(); ctx.arc(pv.hit.x, pv.hit.y, 10 * px, 0, 6.283); ctx.stroke();

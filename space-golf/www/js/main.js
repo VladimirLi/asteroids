@@ -355,7 +355,7 @@ function loadGame(opts) {
     trail: [], ghost: game && game.level === L ? game.lastTrail || game.trail : [], lastTrail: null,
     aim: null, preview: null, penalized: false, shotStats: null, pulseOn: [],
     allTrails: [], fates: [], tags: new Set(), timeScale: 1, slowTarget: 1, zoomTarget: 1,
-    misses: game && game.level === L && opts.keepMisses ? game.misses : 0, demo: false, nearMark: null, ghostGold: false,
+    misses: game && game.level === L && opts.keepMisses ? game.misses : 0, demo: false, nearMark: null, ghostGold: false, guide: null,
     guided: opts.kind === "campaign" && opts.ci === 0 && opts.hi < 3,      // tutorial holes: full preview and GOES IN
     // Tutorial holes show the whole flight. Everywhere else the first look covers about half the straight
     // distance to the cup (roughly 40% of a real route), and grows with every miss.
@@ -378,7 +378,7 @@ function loadGame(opts) {
   layoutRenderer();
   A.playMusic(opts.music);
   const rec = opts.kind === "campaign" ? save.hole(L.id) : null;
-  if (opts.keepMisses || (rec && rec.stars) || (opts.kind === "daily" && save.data.daily[opts.dateKey])) { game.mode = "aim"; toastMsg(L.name, ""); }
+  if (opts.keepMisses || (rec && rec.stars) || (opts.kind === "daily" && save.data.daily[opts.dateKey])) { game.mode = "aim"; }
   else showBrief();
 }
 function updateStrokes() {
@@ -474,7 +474,7 @@ function computePreview() {
   const pts = [];
   let t = game.t, hit = null, dist = 0, acc2 = 0, px = s.x, py = s.y;
   // Each miss on this hole lengthens the preview, so help arrives for players who need it.
-  const maxLen = game.previewBase * (1 + 0.4 * Math.min(game.misses, 6));
+  const maxLen = game.guide ? 2600 : game.previewBase * (1 + 0.4 * Math.min(game.misses, 6));   // after a demo: the whole flight
   let cap = maxLen;
   for (let k = 0; k < 720 && dist < cap; k++) {
     t += PHYS.dt;
@@ -483,12 +483,12 @@ function computePreview() {
     s.events.length = 0;
     if (!warped) { const d = Math.hypot(s.x - px, s.y - py); dist += d; acc2 += d; }
     px = s.x; py = s.y;
-    if (warped && !game.guided) cap = Math.min(cap, dist + 130);      // only a glimpse past a wormhole
+    if (warped && !game.guided && !game.guide) cap = Math.min(cap, dist + 130);      // only a glimpse past a wormhole
     if (acc2 >= 15 || warped) { pts.push(s.x, s.y); acc2 = 0; }
     if (ev) { hit = { ev, x: s.x, y: s.y }; break; }
   }
   game.world.at(game.t);
-  game.preview = { pts, hit, label: game.guided || game.misses >= 3 };
+  game.preview = { pts, hit, label: game.guided || !!game.guide || game.misses >= 3 };
 }
 
 function shoot(lv, demo = false) {
@@ -646,12 +646,31 @@ function showLine() {
     }
     return pick;
   };
-  let best = search(game.rest);
+  // On a hole designed around a landing, show the landing from the tee instead of a thin one-shot line.
+  const landing = () => {
+    const hits = new Map(), cup = game.level.hole;
+    for (let ai = 0; ai < 240; ai++) for (let k = 2; k <= 14; k++) {
+      const p = k / 14, r = (ai * 1.5 * Math.PI) / 180, vx = Math.cos(r) * p * PHYS.maxSpeed, vy = Math.sin(r) * p * PHYS.maxSpeed;
+      const res = simulate(game.world, null, game.t, vx, vy);
+      if (res.ev === "rest" && res.t - game.t < 6) hits.set(ai * 100 + k, { vx, vy, power: p, ai, k, i: res.rest.i, d: Math.hypot(res.x - cup.x, res.y - cup.y) });
+    }
+    const tee = game.level.tee, far = Math.hypot(tee.x - cup.x, tee.y - cup.y);
+    let pick = null;
+    for (const h of hits.values()) {
+      if (h.d > far * 0.8) continue;                      // must make real progress toward the cup
+      h.room = [-3, -2, -1, 1, 2, 3].filter((d) => { const n = hits.get(((h.ai + d + 240) % 240) * 100 + h.k); return n && n.i === h.i; }).length;
+      if (!pick || h.room > pick.room || (h.room === pick.room && h.d < pick.d)) pick = h;
+    }
+    return pick;
+  };
+  let best = game.level.route && game.level.route.land && !game.rest ? landing() : null;
+  if (!best) best = search(game.rest);
   if (!best && game.rest) { best = search(null); if (best) { game.rest = null; toastMsg("No line from there. Back to the tee", ""); } }
   game.world.at(game.t);
   if (!best) { toastMsg("No single-shot line right now. Try again in a moment", ""); return; }
   log("help", { id: game.level.id, strokes: game.strokes, misses: game.misses });
   toastMsg("Watch this line", "good");
+  game.guide = { vx: best.vx, vy: best.vy, power: best.power };
   shoot(best, true);
 }
 
@@ -676,7 +695,9 @@ function handleEnd(ev) {
   if (game.demo) {
     game.demo = false; game.ghost = game.trail; game.trail = []; game.ghostGold = true;
     game.rest = game.from; game.ball = null; game.mode = "aim";
-    toastMsg(ev === "holed" ? "That's the line. Your turn" : "Your turn", "good");
+    const pc = Math.round(game.guide.power * 100);
+    toastMsg(ev === "rest" ? `Land there first. Match the gold arrow: ${pc}%`
+      : game.world.dynamic ? `Match the gold arrow at ${pc}%, then let go when the cup lights up` : `Your turn. Match the gold arrow: ${pc}%`, "good");
     return;
   }
   game.fates.push(ev);
@@ -698,7 +719,7 @@ function handleEnd(ev) {
     finishHole();
   } else if (ev === "rest") {
     const body = game.level.bodies[b.rest.i];
-    game.rest = b.rest; game.ball = null; game.mode = "aim";
+    game.rest = b.rest; game.ball = null; game.mode = "aim"; game.guide = null;
     A.sfx("land"); A.haptic("light");
     R.burst(b.x, b.y, { n: 8, speed: 40, color: "200,220,255", life: 0.5 });
     if (body.type === "moon") award("moon");
@@ -709,8 +730,8 @@ function handleEnd(ev) {
     R.spiral(b.x, b.y); R.kick(6);
     save.count("swallowed"); award("swallowed");
     penalty("Swallowed: +1 penalty", "swallowed");
-  } else if (ev === "lost") miss(game.shotStats.lipped ? "Too fast for the cup. Pull back less" : game.near.d < 70 ? "So close. Ball recalled" : "Lost in space. Ball recalled", "lost");
-  else if (ev === "orbit") miss(game.shotStats.lipped ? "Too fast for the cup. Ball recalled" : game.near.d < 70 ? "So close. Ball recalled" : "Still drifting. Ball recalled", "orbit");
+  } else if (ev === "lost") miss(game.shotStats.lipped ? "Too fast for the cup. Pull back less" : game.near.d < 70 ? "So close. Ball recalled" : game.shotStats.launchSpeed > 0.8 * PHYS.maxSpeed ? "Too hard: it left the course. Pull back less" : "Lost in space. Ball recalled", "lost");
+  else if (ev === "orbit") miss(game.shotStats.lipped ? "Too fast for the cup. Ball recalled" : game.near.d < 70 ? "So close. Ball recalled" : "Drifting with nowhere to land. Ball recalled", "orbit");
 }
 
 // ---------------------------------------------------------------- results
@@ -747,7 +768,7 @@ function finishHole() {
   } else {
     if (save.count("freeplay") >= 10) award("free10");
   }
-  if (stars < 3) text += ` Three stars: ${par - 1 === 1 ? "a hole in one" : `${par - 1} strokes or fewer`}.`;
+  if (stars < 3) text += ` For three stars: ${par - 1 === 1 ? "a hole in one" : `${par - 1} strokes or fewer`}.`;
   game.chapterJustDone = chapterJustDone;
   game.stars = stars;
   log("hole_end", { id: L.id, kind: game.kind, strokes: n, par, stars, misses: game.misses, tags: [...game.tags].join(",") });
@@ -967,7 +988,7 @@ function frame(now) {
       const ballPos = game.ball ? game.ball : game.mode === "done" ? null : restPos(game.world, game.rest, game.t);
       if (game.mode !== "done" && game.mode !== "fly" && R.view.zoom > 1.001) R.view.zoom += (1 - R.view.zoom) * Math.min(1, dt * 3);
       R.draw({ world: game.world, t: game.t, mode: game.mode, aim: game.aim, aiming: !!game.aim, preview: game.preview, trail: game.trail, ghost: game.ghost, ballPos,
-        nearMark: game.mode === "aim" ? game.nearMark : null, ghostGold: game.ghostGold,
+        nearMark: game.mode === "aim" ? game.nearMark : null, ghostGold: game.ghostGold, guide: game.guide,
         labelAlpha: game.aim || game.mode === "fly" ? 0 : Math.max(0, Math.min(1, (9 - game.t) / 1.5)),
         skin: game.skin, tutorial: game.tutorial && game.mode === "aim" && !game.aim && !overlays.length });
     }
