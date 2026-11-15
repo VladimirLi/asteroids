@@ -38,7 +38,7 @@ export default {
       ],
     },
     {
-      id: "c1h4", name: "Stepping Stones", par: 3, w: 1400, h: 900, preview: 1.4,
+      id: "c1h4", name: "Stepping Stones", par: 3, route: { land: true }, w: 1400, h: 900, preview: 1.4,
       intro: { text: "Touch down gently on a planet and you land. Your next shot starts from there, and every shot is a stroke.",
         legend: ["planet", "Planets are safe to land on. Hit one too hard and you bounce off instead."] },
       hint: "The blue planet is in the way, so land on the <b>violet planet</b> first: from there the cup is in plain view.",

@@ -357,7 +357,10 @@ function loadGame(opts) {
     allTrails: [], fates: [], tags: new Set(), timeScale: 1, slowTarget: 1, zoomTarget: 1,
     misses: game && game.level === L && opts.keepMisses ? game.misses : 0, demo: false, nearMark: null, ghostGold: false,
     guided: opts.kind === "campaign" && opts.ci === 0 && opts.hi < 3,      // tutorial holes: full preview and GOES IN
-    previewBase: L.previewLen || (opts.kind !== "campaign" ? 600 : opts.ci === 0 ? (opts.hi < 3 ? 2600 : opts.hi < 6 ? 720 : 640) : [0, 600, 560, 520][opts.ci]),
+    // Tutorial holes show the whole flight. Everywhere else the first look covers about half the straight
+    // distance to the cup (roughly 40% of a real route), and grows with every miss.
+    previewBase: L.previewLen || (opts.kind === "campaign" && opts.ci === 0 && opts.hi < 3 ? 2600
+      : Math.max(300, Math.min(560, 0.5 * Math.hypot(L.hole.x - L.tee.x, L.hole.y - L.tee.y)))),
     skin: currentSkin(save), tutorial: !save.seen("tutorial"),
   };
   log("hole_start", { id: L.id, kind: opts.kind, par: L.par, seed: opts.kind === "campaign" ? undefined : L.seed, retry: !!opts.keepMisses, misses: game.misses });

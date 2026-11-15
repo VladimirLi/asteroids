@@ -31,6 +31,17 @@ function solveHole(hole, quick) {
   const windows = [], directWins = [];   // per launch time: widest run of neighbouring angles that all ace at one power
   const bearing = (Math.atan2(hole.hole.y - hole.tee.y, hole.hole.x - hole.tee.x) * 180) / Math.PI;
   const offLine = (a) => Math.abs(((a - bearing + 540) % 360) - 180);
+  // Intended route (optional, set per hole as `route`):
+  //   route: { land: true }          the hole is meant to need a landing; any comfortable ace is a shortcut
+  //   route: { via: [x, y, r] }      aces are meant to pass through this circle
+  const via = hole.route && hole.route.via;
+  let viaAll = 0, viaHit = 0;
+  const passes = (w, t0, r, p) => {
+    const path = simulate(w, null, t0, Math.cos(r) * p * PHYS.maxSpeed, Math.sin(r) * p * PHYS.maxSpeed, true).path;
+    for (let i = 0; i < path.length; i += 3) if (Math.hypot(path[i] - via[0], path[i + 1] - via[1]) <= via[2]) return true;
+    return false;
+  };
+  const aceAngles = new Set();
   for (const t0 of starts) {
     const run = new Array(powers + 1).fill(0), bestRun = new Array(powers + 1).fill(0);
     const dRun = new Array(powers + 1).fill(0); let dBest = 0;
@@ -39,7 +50,7 @@ function solveHole(hole, quick) {
         const p = k / powers, r = (a * Math.PI) / 180;
         const res = simulate(world, null, t0, Math.cos(r) * p * PHYS.maxSpeed, Math.sin(r) * p * PHYS.maxSpeed);
         shots++; fates[res.ev]++;
-        if (res.ev === "holed") { aces++; if (example.length < 2) example.push(`t=${t0} ${a}deg ${Math.round(p * 100)}%`); }
+        if (res.ev === "holed") { aces++; aceAngles.add(a); if (via) { viaAll++; if (passes(world, t0, r, p)) viaHit++; } if (example.length < 2) example.push(`t=${t0} ${a}deg ${Math.round(p * 100)}%`); }
         else if (res.ev === "rest") landings.push(res);
         run[k] = res.ev === "holed" ? run[k] + 1 : 0;
         if (run[k] > bestRun[k]) bestRun[k] = run[k];
@@ -90,7 +101,18 @@ function solveHole(hole, quick) {
   if (!threeStar) notes.push("3 stars not verified");
   if (aimWindow < 2) notes.push(`aim window only ${aimWindow} deg (thumbs need 2+)`);
   if (world.dynamic && worstWindow < 1) notes.push(`at some moments the window is ${worstWindow} deg`);
-  return { id: hole.id, name: hole.name, par: hole.par, shots, aces, acePct: +acePct.toFixed(2), aimWindow, worstWindow, directWindow, landPct: +landPct.toFixed(1), landingSpots: spots.length,
+  // Ace routes: launch directions that can ace, merged into ranges, relative to the straight line to the cup.
+  const sorted = [...aceAngles].sort((x, y) => x - y), routes = [];
+  for (const a of sorted) {
+    const last = routes[routes.length - 1];
+    if (last && a - last[1] <= angStep * 3) last[1] = a; else routes.push([a, a]);
+  }
+  const rel = (a) => Math.round(((a - bearing + 540) % 360) - 180);
+  const aceRoutes = routes.filter((r) => r[1] - r[0] >= 1).map((r) => `${rel(r[0])}..${rel(r[1])}`);
+  const viaPct = via && viaAll ? Math.round((100 * viaHit) / viaAll) : null;
+  if (hole.route && hole.route.land && aimWindow > 3) notes.push(`SHORTCUT: meant to need a landing but aces with a ${aimWindow} deg window`);
+  if (via && viaAll && viaPct < 70) notes.push(`SHORTCUT: only ${viaPct}% of aces use the intended route`);
+  return { aceRoutes, viaPct, id: hole.id, name: hole.name, par: hole.par, shots, aces, acePct: +acePct.toFixed(2), aimWindow, worstWindow, directWindow, landPct: +landPct.toFixed(1), landingSpots: spots.length,
     sampled: sample.length, spotsWithAce, fates, best, playable, threeStar, example, notes };
 }
 
@@ -116,7 +138,7 @@ if (isMainThread) {
       w.on("message", (r) => {
         results.push(r);
         const flag = r.playable && r.threeStar && !r.notes.length ? "ok " : r.playable ? "!! " : "XX ";
-        console.log(`${flag}${r.id.padEnd(6)} ${r.name.padEnd(20)} par ${r.par} | best ${r.best ?? ">2"} | ace ${String(r.acePct).padStart(5)}% | window ${String(r.aimWindow).padStart(4)}° (worst ${r.worstWindow}°, direct ${r.directWindow}°) | lands ${String(r.landPct).padStart(4)}% | landings ${String(r.landingSpots).padStart(3)} (${r.spotsWithAce}/${r.sampled} can ace next) | lost ${r.fates.lost} swallowed ${r.fates.swallowed} orbit ${r.fates.orbit}${r.notes.length ? " | " + r.notes.join("; ") : ""}`);
+        console.log(`${flag}${r.id.padEnd(6)} ${r.name.padEnd(20)} par ${r.par} | best ${r.best ?? ">2"} | ace ${String(r.acePct).padStart(5)}% | window ${String(r.aimWindow).padStart(4)}° (worst ${r.worstWindow}°, direct ${r.directWindow}°) | lands ${String(r.landPct).padStart(4)}% | landings ${String(r.landingSpots).padStart(3)} (${r.spotsWithAce}/${r.sampled} can ace next) | routes ${r.aceRoutes.join(" ") || "-"}${r.viaPct !== null ? ` (via ${r.viaPct}%)` : ""} | lost ${r.fates.lost} swallowed ${r.fates.swallowed} orbit ${r.fates.orbit}${r.notes.length ? " | " + r.notes.join("; ") : ""}`);
       });
       w.on("error", (e) => { console.error(id, e); });
       w.on("exit", () => { live--; spawn(); });

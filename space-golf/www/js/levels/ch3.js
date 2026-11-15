@@ -76,7 +76,7 @@ export default {
       ],
     },
     {
-      id: "c3h5", name: "Stepping Stone", par: 3, w: 1400, h: 900, preview: 1.2,
+      id: "c3h5", name: "Stepping Stone", par: 3, route: { land: true }, w: 1400, h: 900, preview: 1.2,
       hint: "The red star shields the cup from the tee, so use the planet as a <b>second tee</b>.",
       tee: { x: 180, y: 450 },
       hole: { x: 875, y: 405 },

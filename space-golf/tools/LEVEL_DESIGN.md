@@ -86,3 +86,13 @@ Rules for this pass (in addition to round 1's: truthful hints, lay-ups, no hazar
 7. **Vary the solutions.** Within a chapter the winning shots should not all be the same direction and power from the tee; move tees and cups around the course.
 8. A planet next to the cup (within ~120 of the cup) makes tap-ins fall back onto it: avoid resting spots closer than 150 to the cup, or make sure a 30-45% shot from there drops.
 9. Physics changed again for this pass: the cup now pulls slow balls in from the green (holeMu 300000, capture speed 300) and a ball still flying after 9 s is recalled (was 11). Re-verify everything; long crawling aces (8 s+) are gone.
+
+## Intended routes (round 3)
+
+The solver prints `routes`: the launch directions that can ace, as ranges in degrees off the straight
+tee-to-cup line. Read it for every hole and check each range is a route you meant to exist.
+
+- `route: { land: true }` on a hole means it is designed around a landing. The solver flags it if an ace
+  has an aim window wider than 3 degrees. A thin, hard ace is welcome; a comfortable one is a shortcut.
+- `route: { via: [x, y, r] }` means aces should pass through that circle. The solver flags the hole if
+  fewer than 70% of aces do.
