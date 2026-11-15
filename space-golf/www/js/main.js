@@ -447,7 +447,11 @@ function leaveGame() {
 const btnReset = $("gReset");
 btnReset.onclick = giveUpShot;
 $("gShow").onclick = showLine;
-function giveUpShot() { if (game && game.mode === "fly" && !game.demo) miss("Ball recalled", "orbit"); }
+function giveUpShot() {
+  if (!game || game.mode !== "fly" || game.demo) return;
+  log("shot_end", { ev: "recalled", fly: game.flyTime, near: game.near ? game.near.d : undefined });
+  miss("Ball recalled", "orbit");
+}
 
 function aimVelocity(aim) {
   const dx = aim.sx - aim.cx, dy = aim.sy - aim.cy, len = Math.hypot(dx, dy);
