@@ -1,6 +1,6 @@
 // Daily Orbit: a procedurally generated hole, identical for every player on a given date,
 // verified on-device to be holeable in one before it is served.
-import { rng, findAces, PHYS } from "./core.js";
+import { rng, findAces, PHYS, World, simulate } from "./core.js";
 
 const COLORS = ["#5b8def", "#e0905a", "#7cc97a", "#c27be0", "#e0c35a", "#5ac8c8", "#d96a7a"];
 const NAMES_A = ["Quiet", "Crooked", "Amber", "Hollow", "Silver", "Drifting", "Long", "Twin", "Burning", "Sleeping", "Lucky", "Distant"];
@@ -98,14 +98,22 @@ export function generate(seed, label) {
 // Find the first seed variant for this label whose hole is fair: aces exist, but not too many.
 export async function dailyHole(label, onProgress) {
   const base = hashStr("perihelion:" + label);
-  for (let k = 0; k < 40; k++) {
+  for (let k = 0; k < 80; k++) {
     const lvl = generate((base + k * 7919) >>> 0, label);
     if (lvl.bodies.length < 2) continue;
     const yieldNow = () => new Promise((r) => setTimeout(r, 0));
+    // Cheap check first: the naive shot, pointing (almost) straight at the cup, must not go in.
+    const bearing = Math.atan2(lvl.hole.y - lvl.tee.y, lvl.hole.x - lvl.tee.x), w = new World(lvl);
+    let straight = false;
+    for (let d = -8; d <= 8 && !straight; d += 2) for (let q = 1; q <= 12; q++) {
+      const r = bearing + (d * Math.PI) / 180, v = (q / 12) * PHYS.maxSpeed;
+      if (simulate(w, null, 0, Math.cos(r) * v, Math.sin(r) * v).ev === "holed") { straight = true; break; }
+    }
+    if (straight) { if (onProgress) onProgress(k); continue; }
     const aces = await findAces(lvl, { angStep: 2, powers: 12, onChunk: yieldNow });
     if (onProgress) onProgress(k);
     const rate = aces.length / (180 * 12);
-    if (aces.length < 4 || rate > 0.05) continue;
+    if (aces.length < 4 || rate > 0.03) continue;
     // Moving holes must be fair whenever you shoot, not only at one lucky moment.
     if (lvl.bodies.some((b) => b.orbit || b.pulse)) {
       const later = await findAces(lvl, { angStep: 3, powers: 10, t0: 2.7, onChunk: yieldNow });
