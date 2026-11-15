@@ -42,11 +42,11 @@ export default {
       intro: { text: "Touch down gently on a planet and you land. Your next shot starts from there, and every shot is a stroke.",
         legend: ["planet", "Planets are safe to land on. Hit one too hard and you bounce off instead."] },
       hint: "The blue planet is in the way, so land on the <b>violet planet</b> first: from there the cup is in plain view.",
-      tee: { x: 220, y: 180 },
-      hole: { x: 1150, y: 700 },
+      tee: { x: 140, y: 135 },
+      hole: { x: 1270, y: 765 },
       bodies: [
-        { type: "planet", x: 700, y: 450, r: 85, mu: 4.3e6, color: "#5b8def" },
-        { type: "planet", x: 1000, y: 170, r: 65, mu: 2.5e6, color: "#c27be0" },
+        { type: "planet", x: 305, y: 250, r: 50, mu: 1.49e6, color: "#5b8def" },
+        { type: "planet", x: 960, y: 230, r: 85, mu: 4.3e6, color: "#c27be0" },
       ],
     },
     {

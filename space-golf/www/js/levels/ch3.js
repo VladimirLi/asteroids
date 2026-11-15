@@ -78,11 +78,11 @@ export default {
     {
       id: "c3h5", name: "Stepping Stone", par: 3, route: { land: true }, w: 1400, h: 900, preview: 1.2,
       hint: "The red star shields the cup from the tee, so use the planet as a <b>second tee</b>.",
-      tee: { x: 180, y: 450 },
-      hole: { x: 875, y: 405 },
+      tee: { x: 240, y: 390 },
+      hole: { x: 890, y: 365 },
       bodies: [
-        { type: "planet", x: 785, y: 640, r: 90, mu: 4.86e6, color: "#5ac8c8" },
-        { type: "repulsor", x: 770, y: 380, r: 22, mu: -1.4e6 },
+        { type: "planet", x: 765, y: 680, r: 90, mu: 4.86e6, color: "#5ac8c8" },
+        { type: "repulsor", x: 785, y: 360, r: 20, mu: -1.35e6 },
       ],
     },
     {
