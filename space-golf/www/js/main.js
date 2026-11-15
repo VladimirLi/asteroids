@@ -8,6 +8,7 @@ import { PROLOGUE, CHAPTER_STORY, QUIPS, SPEAKER } from "./story.js";
 import { dailyHole, dateKey, yesterdayKey } from "./daily.js";
 import { SKINS, skinUnlocked, currentSkin } from "./skins.js";
 import { shareText, share } from "./share.js";
+import { log, flush } from "./playlog.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("stage");
@@ -359,6 +360,8 @@ function loadGame(opts) {
     previewBase: L.previewLen || (opts.kind !== "campaign" ? 600 : opts.ci === 0 ? (opts.hi < 3 ? 2600 : opts.hi < 6 ? 720 : 640) : [0, 600, 560, 520][opts.ci]),
     skin: currentSkin(save), tutorial: !save.seen("tutorial"),
   };
+  log("hole_start", { id: L.id, kind: opts.kind, par: L.par, seed: opts.kind === "campaign" ? undefined : L.seed, retry: !!opts.keepMisses, misses: game.misses });
+  flush();
   show("game");
   R.setLevel(L, opts.sky);
   $("gName").textContent = L.name;
@@ -416,6 +419,7 @@ function resume() { closeOv("pause"); }
 $("gPause").onclick = pause;
 $("gRetry").onclick = () => {
   if (!game || overlays.length) return;
+  log("restart", { id: game.level.id, strokes: game.strokes, misses: game.misses });
   const keep = { ...game, ghost: game.trail.length ? game.trail : game.ghost, keepMisses: true };
   loadGame(keep);
   toastMsg("Fresh start", "");
@@ -426,6 +430,7 @@ $("pShow").onclick = () => { closeOv("pause"); showLine(); };
 $("pSkip").onclick = async () => {
   if (!(await confirmBox("Skip this hole?", "The next hole opens, but this one earns no stars until you come back and finish it.", "Skip"))) return;
   const g = game; closeOv("pause");
+  log("skip", { id: g.level.id, strokes: g.strokes, misses: g.misses }); flush();
   save.skipHole(g.level.id);
   const ch = CHAPTERS[g.ci];
   if (g.hi < ch.holes.length - 1) startHole(g.ci, g.hi + 1);
@@ -434,6 +439,7 @@ $("pSkip").onclick = async () => {
 $("pQuit").onclick = () => { closeOv("pause"); leaveGame(); };
 function leaveGame() {
   const g = game;
+  if (g && g.mode !== "done") { log("leave", { id: g.level.id, strokes: g.strokes, misses: g.misses }); flush(); }
   if (g && g.kind === "campaign") { viewChapter = g.ci; show("holes"); } else show("title");
 }
 
@@ -492,6 +498,8 @@ function shoot(lv, demo = false) {
   game.flyTime = 0;
   game.shotStats = { bounces: 0, maxSpeed: 0, launchSpeed: Math.hypot(lv.vx, lv.vy), graze: {}, inCloud: false, cloudBrake: false, asteroid: false, bumper: false, warped: false, sparkT: 0 };
   if (game.tutorial) { game.tutorial = false; save.markSeen("tutorial"); }
+  log(demo ? "demo_shot" : "shot", { id: game.level.id, n: game.strokes, vx: lv.vx, vy: lv.vy, power: lv.power, at: game.t,
+    from: game.from ? (game.from.i !== undefined ? [game.from.i, game.from.ang] : [game.from.x, game.from.y]) : undefined, misses: game.misses });
   if (!demo) save.count("shots");
   A.sfx("launch", { power: lv.power }); A.haptic("light");
   const p = restPos(game.world, game.from, game.t);
@@ -635,6 +643,7 @@ function showLine() {
   if (!best && game.rest) { best = search(null); if (best) { game.rest = null; toastMsg("No line from there. Back to the tee", ""); } }
   game.world.at(game.t);
   if (!best) { toastMsg("No single-shot line right now. Try again in a moment", ""); return; }
+  log("help", { id: game.level.id, strokes: game.strokes, misses: game.misses });
   toastMsg("Watch this line", "good");
   shoot(best, true);
 }
@@ -652,9 +661,11 @@ function collectTags(holed) {
 
 function handleEnd(ev) {
   const b = game.ball;
+  setTimeout(flush, 0);
   if (game.shotStats.bounces >= 4) award("pinball");
   if (game.shotStats.maxSpeed >= 900) award("fast");
   btnReset.hidden = true;
+  log("shot_end", { ev, fly: game.flyTime, near: game.near ? game.near.d : undefined, lip: game.shotStats.lipped, demo: game.demo, x: b.x, y: b.y });
   if (game.demo) {
     game.demo = false; game.ghost = game.trail; game.trail = []; game.ghostGold = true;
     game.rest = game.from; game.ball = null; game.mode = "aim";
@@ -732,6 +743,8 @@ function finishHole() {
   if (stars < 3) text += ` Three stars: ${par - 1 === 1 ? "a hole in one" : `${par - 1} strokes or fewer`}.`;
   game.chapterJustDone = chapterJustDone;
   game.stars = stars;
+  log("hole_end", { id: L.id, kind: game.kind, strokes: n, par, stars, misses: game.misses, tags: [...game.tags].join(",") });
+  flush();
   checkNewSkins(skinsBefore);
   const order = ["Ace", "Slingshot", "Wormhole", "Close call", "Bank shot", "Bumper", "Nebula brake", "Long haul", "Comeback"];
   const tags = order.filter((t) => game.tags.has(t));
@@ -969,6 +982,7 @@ window.__pg = {
   save,
 };
 
+log("app_start", { stars: save.totalStars(), holes: save.holesDone() });
 applySettings();
 show("title");
 document.fonts && document.fonts.ready.then(() => layoutRenderer());
