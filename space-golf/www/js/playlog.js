@@ -6,7 +6,7 @@
 //  - Everywhere else (the Android app, a plain browser): nothing leaves the device; the last
 //    events are only kept in local storage.
 // No personal data is recorded: a random session id, the screen size, and gameplay events.
-export const BUILD = "1.6";
+export const BUILD = "1.7";
 
 const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
 const t0 = Date.now();

@@ -81,8 +81,8 @@ export function generate(seed, label) {
       const nearCup = R() < 0.6;
       const c = nearCup ? { x: hole.x, y: hole.y } : { x: Math.round(mid.x + between(-150, 150)), y: Math.round(mid.y + between(-150, 150)) };
       bodies.unshift({ type: "cloud", ...c, r, drag: +between(0.9, 1.6).toFixed(1) });
-      // indices shift: fix orbit references
-      bodies.forEach((b) => { if (b.orbit && typeof b.orbit.around === "number") b.orbit.around++; });
+      // indices shift: fix orbit and wormhole references
+      bodies.forEach((b) => { if (b.orbit && typeof b.orbit.around === "number") b.orbit.around++; if (typeof b.link === "number") b.link++; });
     } else if (kind === "wormhole" && !bodies.some((b) => b.type === "wormhole")) {
       const a = place(40, 40, [0.15, 0.6]), b = place(40, 40, [0.45, 0.9]);
       if (a && b) {
