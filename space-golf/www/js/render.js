@@ -237,7 +237,7 @@ export class Renderer {
       ctx.beginPath(); ctx.moveTo(ex + Math.cos(a) * 10 * px, ey + Math.sin(a) * 10 * px);
       ctx.lineTo(ex + Math.cos(a + 2.5) * 10 * px, ey + Math.sin(a + 2.5) * 10 * px);
       ctx.lineTo(ex + Math.cos(a - 2.5) * 10 * px, ey + Math.sin(a - 2.5) * 10 * px); ctx.closePath(); ctx.fill();
-      ctx.font = `700 ${13 * px}px 'IBM Plex Mono', monospace`; ctx.textAlign = "center";
+      ctx.font = `700 ${17 * px}px 'IBM Plex Mono', monospace`; ctx.textAlign = "center";
       ctx.lineWidth = 4 * px; ctx.strokeStyle = "rgba(6,9,22,0.9)";
       const lx = ex + Math.cos(a) * 30 * px, ly = ey + Math.sin(a) * 30 * px + 4 * px, txt = Math.round(g.power * 100) + "%";
       ctx.strokeText(txt, lx, ly); ctx.fillText(txt, lx, ly);

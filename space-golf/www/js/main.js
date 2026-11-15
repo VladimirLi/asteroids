@@ -360,7 +360,7 @@ function loadGame(opts) {
     // Tutorial holes show the whole flight. Everywhere else the first look covers about half the straight
     // distance to the cup (roughly 40% of a real route), and grows with every miss.
     previewBase: L.previewLen || (opts.kind === "campaign" && opts.ci === 0 && opts.hi < 3 ? 2600
-      : Math.max(300, Math.min(560, 0.5 * Math.hypot(L.hole.x - L.tee.x, L.hole.y - L.tee.y)))),
+      : Math.max(300, Math.min(opts.ci === 0 && opts.kind === "campaign" ? 700 : 560, (opts.ci === 0 && opts.kind === "campaign" ? 0.7 : 0.5) * Math.hypot(L.hole.x - L.tee.x, L.hole.y - L.tee.y)))),
     skin: currentSkin(save), tutorial: !save.seen("tutorial"),
   };
   log("hole_start", { id: L.id, kind: opts.kind, par: L.par, seed: opts.kind === "campaign" ? undefined : L.seed, retry: !!opts.keepMisses, misses: game.misses });
@@ -474,7 +474,7 @@ function computePreview() {
   const pts = [];
   let t = game.t, hit = null, dist = 0, acc2 = 0, px = s.x, py = s.y;
   // Each miss on this hole lengthens the preview, so help arrives for players who need it.
-  const maxLen = game.guide ? 2600 : game.previewBase * (1 + 0.4 * Math.min(game.misses, 6));   // after a demo: the whole flight
+  const maxLen = game.guide ? 2600 : game.previewBase * (1 + 0.6 * Math.min(game.misses, 5));   // after a demo: the whole flight
   let cap = maxLen;
   for (let k = 0; k < 720 && dist < cap; k++) {
     t += PHYS.dt;
@@ -494,6 +494,9 @@ function computePreview() {
 function shoot(lv, demo = false) {
   game.aim = null; game.preview = null;
   if (!lv || overlays.length) return;
+  // The flight is deterministic, so its fate is known at launch: a shot that will only drift is recalled early.
+  game.fate = demo ? null : simulate(game.world, game.rest, game.t, lv.vx, lv.vy).ev;
+  game.world.at(game.t);
   game.ball = launch(game.world, game.rest, game.t, lv.vx, lv.vy);
   game.from = game.rest;
   game.demo = demo; game.nearMark = null; game.near = { d: Infinity, x: 0, y: 0 };
@@ -516,7 +519,7 @@ function shoot(lv, demo = false) {
 // A miss costs only the stroke already played; the ball comes back to where the shot started.
 // Only black holes add a penalty stroke.
 function miss(msg, kind) { penalty(msg, kind, false); }
-function offerHelp() { if (game.misses >= 3 || game.strokes >= game.level.par + 2) $("gShow").hidden = false; }
+function offerHelp() { if (game.misses >= 2 || game.strokes >= game.level.par + 2) $("gShow").hidden = false; }
 function penalty(msg, kind, extra = true) {
   if (extra) { game.strokes++; updateStrokes(); game.penalized = true; }
   game.misses++;
@@ -724,6 +727,7 @@ function handleEnd(ev) {
     R.burst(b.x, b.y, { n: 8, speed: 40, color: "200,220,255", life: 0.5 });
     if (body.type === "moon") award("moon");
     const fellBack = game.from && game.from.i === b.rest.i && game.flyTime < 2.2;
+    if (fellBack && game.flyTime < 0.5 && game.strokes > 0) { game.strokes--; updateStrokes(); }   // never left the ground: no stroke
     toastMsg(game.shotStats.lipped ? "Too fast for the cup. Landed" : fellBack ? "Gravity pulled it back. Pull harder to leave" : "Landed", game.shotStats.lipped || fellBack ? "bad" : "");
     if (game.kind === "campaign" || game.strokes >= 2) offerHelp();
   } else if (ev === "swallowed") {
@@ -731,7 +735,7 @@ function handleEnd(ev) {
     save.count("swallowed"); award("swallowed");
     penalty("Swallowed: +1 penalty", "swallowed");
   } else if (ev === "lost") miss(game.shotStats.lipped ? "Too fast for the cup. Pull back less" : game.near.d < 70 ? "So close. Ball recalled" : game.shotStats.launchSpeed > 0.8 * PHYS.maxSpeed ? "Too hard: it left the course. Pull back less" : "Lost in space. Ball recalled", "lost");
-  else if (ev === "orbit") miss(game.shotStats.lipped ? "Too fast for the cup. Ball recalled" : game.near.d < 70 ? "So close. Ball recalled" : "Drifting with nowhere to land. Ball recalled", "orbit");
+  else if (ev === "orbit") miss(game.shotStats.lipped ? "Too fast for the cup. Ball recalled" : game.near.d < 70 ? "So close. Ball recalled" : game.shotStats.launchSpeed < 0.4 * PHYS.maxSpeed ? "Too soft: it ran out of speed. Ball recalled" : "Drifting with nowhere to land. Ball recalled", "orbit");
 }
 
 // ---------------------------------------------------------------- results
@@ -971,6 +975,7 @@ function frame(now) {
           if (game.trail.length > 9000) game.trail.splice(0, 3);
           game.flyTime += PHYS.dt;
           if (ev) { handleEnd(ev); if (!game) break; }
+          else if (game.fate === "orbit" && game.flyTime > 4.5) { handleEnd("orbit"); if (!game) break; }
         }
       }
       if (game && game.mode === "fly" && game.flyTime > 2.5) btnReset.hidden = false;
