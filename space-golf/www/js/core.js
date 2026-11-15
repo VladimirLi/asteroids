@@ -8,12 +8,12 @@ export const PHYS = {
   restitution: 0.42,
   friction: 0.7,
   maxSpeed: 620,      // launch speed at full power
-  captureSpeed: 250,  // the cup only catches balls slower than this
+  captureSpeed: 300,  // the cup only catches balls slower than this
   holeR: 22,
-  holeMu: 60000,
+  holeMu: 300000,     // the cup tugs slow balls in from the green
   greenR: 78,         // soft braking zone around every cup
   greenDrag: 2.6,
-  maxFlight: 11,      // seconds before a ball is declared lost in orbit
+  maxFlight: 9,      // seconds before a ball is declared lost in orbit
   margin: 260,        // how far outside the course before the ball is lost
   soft: 10,
   worldW: 1400,

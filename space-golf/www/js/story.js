@@ -32,7 +32,7 @@ export const CHAPTER_STORY = {
 
 // Short remarks after a hole, picked by result. Keeps the caretaker present without slowing play.
 export const QUIPS = {
-  ace: ["Straight in. I'm writing that one down.", "One stroke. The builders would have applauded.", "Perfect line."],
+  ace: ["In one. I'm writing that down.", "One stroke. The builders would have applauded.", "Perfect line."],
   under: ["Under par. Very tidy.", "That's a birdie in any star system.", "The planets approve."],
   par: ["Par. Solid work.", "Right on the number.", "Steady hands."],
   over: ["It went in. That's what counts.", "Every cup lit is a cup lit.", "Space is big. You'll get it next time."],

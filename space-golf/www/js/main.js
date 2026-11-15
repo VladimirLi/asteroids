@@ -44,9 +44,11 @@ function award(id) {
   achQueue.push(a);
   if (!achShowing) nextAch();
 }
+const achAllowed = () => screen !== "game" || overlays.includes("result");
 function nextAch() {
+  if (!achQueue.length) { achShowing = false; return; }
+  if (!achAllowed()) { achShowing = true; setTimeout(nextAch, 500); return; }   // wait for a quiet moment
   const a = achQueue.shift();
-  if (!a) { achShowing = false; return; }
   achShowing = true;
   $("achName").textContent = a.name;
   $("achToast").querySelector(".eyebrow").textContent = a.eyebrow || "Logbook entry";
@@ -83,6 +85,7 @@ function show(scr) {
 function openOv(id) {
   if (game) { game.aim = null; game.preview = null; }   // never fire a shot from behind a dialog
   if (!overlays.includes(id)) overlays.push(id);
+  document.body.classList.add("has-ov");
   $("ov-" + id).hidden = false;
   const btn = $("ov-" + id).querySelector(".primary");
   if (btn) setTimeout(() => btn.focus({ preventScroll: true }), 30);
@@ -90,6 +93,7 @@ function openOv(id) {
 function closeOv(id) {
   const i = overlays.indexOf(id);
   if (i >= 0) overlays.splice(i, 1);
+  if (!overlays.length) document.body.classList.remove("has-ov");
   $("ov-" + id).hidden = true;
 }
 const topOv = () => overlays[overlays.length - 1];
@@ -145,6 +149,8 @@ function story(title, pages, onDone, cancellable) {
     if (++i < pages.length) render();
     else { closeOv("story"); storyCancel = null; onDone && onDone(); }
   };
+  $("sSkip").hidden = pages.length < 2;
+  $("sSkip").onclick = () => { closeOv("story"); storyCancel = null; onDone && onDone(); };
   render();
   openOv("story");
 }
@@ -273,7 +279,7 @@ function renderChapters() {
     const open = chapterUnlocked(ci);
     const b = document.createElement("button");
     b.className = "chapter" + (open ? "" : " locked");
-    const done = ch.holes.filter((h) => holeDone(h.id)).length;
+    const done = ch.holes.filter((h) => save.hole(h.id)?.stars).length;
     b.innerHTML = `<canvas width="128" height="128"></canvas><span><span class="c-place">Chapter ${ci + 1} · ${ch.place}</span><span class="c-name">${ch.name}</span><span class="c-place">${open ? `${done} / ${ch.holes.length} holes · <span class="c-stars">★ ${chapterStars(ci)} / ${ch.holes.length * 3}</span>` : "Locked · finish the previous chapter"}</span></span>`;
     drawChapterBadge(b.querySelector("canvas"), ch, open);
     b.onclick = () => { if (!open) { toastMsg("Locked", "bad"); return; } viewChapter = ci; show("holes"); };
@@ -348,8 +354,9 @@ function loadGame(opts) {
     trail: [], ghost: game && game.level === L ? game.lastTrail || game.trail : [], lastTrail: null,
     aim: null, preview: null, penalized: false, shotStats: null, pulseOn: [],
     allTrails: [], fates: [], tags: new Set(), timeScale: 1, slowTarget: 1, zoomTarget: 1,
-    misses: 0, demo: false, nearMark: null,
-    previewLen: L.previewLen || (opts.kind !== "campaign" ? 950 : opts.ci === 0 ? (opts.hi < 5 ? 2600 : 1300) : [0, 1050, 950, 900][opts.ci]),
+    misses: game && game.level === L && opts.keepMisses ? game.misses : 0, demo: false, nearMark: null, ghostGold: false,
+    guided: opts.kind === "campaign" && opts.ci === 0 && opts.hi < 3,      // tutorial holes: full preview and GOES IN
+    previewBase: L.previewLen || (opts.kind !== "campaign" ? 600 : opts.ci === 0 ? (opts.hi < 3 ? 2600 : opts.hi < 6 ? 720 : 640) : [0, 600, 560, 520][opts.ci]),
     skin: currentSkin(save), tutorial: !save.seen("tutorial"),
   };
   show("game");
@@ -364,7 +371,9 @@ function loadGame(opts) {
   updateStrokes();
   layoutRenderer();
   A.playMusic(opts.music);
-  showBrief();
+  const rec = opts.kind === "campaign" ? save.hole(L.id) : null;
+  if (opts.keepMisses || (rec && rec.stars) || (opts.kind === "daily" && save.data.daily[opts.dateKey])) { game.mode = "aim"; toastMsg(L.name, ""); }
+  else showBrief();
 }
 function updateStrokes() {
   $("gStrokes").innerHTML = `${game.strokes}<small> / par ${game.level.par}</small>`;
@@ -381,7 +390,13 @@ function showBrief() {
   $("bText").innerHTML = intro ? intro.text : newbie ? "Drag anywhere and pull back, like a slingshot. Let go to launch. The dotted line shows where the ball will go." : (L.hint || "");
   $("bLegend").hidden = !(intro && intro.legend) && !newbie;
   if (intro && intro.legend) { drawIcon($("bIcon"), intro.legend[0]); $("bLegendText").textContent = intro.legend[1]; }
-  else if (newbie) { drawIcon($("bIcon"), "cup"); $("bLegendText").textContent = "The cup only catches a slow ball. When the dotted line turns gold, the shot goes in."; }
+  else if (newbie) { drawIcon($("bIcon"), "cup"); $("bLegendText").textContent = "The cup only catches a slow ball, so arrive gently."; }
+  if (game.kind !== "campaign") {
+    const KEY = { planet: "Planets pull and can be landed on.", moon: "Moons orbit and pull.", asteroid: "Rocks bounce the ball.", blackhole: "Black holes swallow the ball: +1 penalty.",
+      repulsor: "Red stars push the ball away.", cloud: "Nebulae slow the ball.", wormhole: "Wormholes link in pairs and keep your heading.", pulsar: "Pulsars switch their pull on and off.", star: "Twin suns orbit each other and pull hard." };
+    const kinds = [...new Set(L.bodies.map((b) => b.type))].filter((k) => k !== "planet" || newbie);
+    $("bText").innerHTML += `<br><span class="keyline">${kinds.map((k) => KEY[k]).join(" ")}</span>`;
+  }
   let best = "";
   if (rec) best = `Your best: <b>${rec.best}</b> · ${"★".repeat(rec.stars)}${"☆".repeat(3 - rec.stars)}`;
   else if (game.kind === "daily" && save.data.daily[game.dateKey]) best = `Today's best: <b>${save.data.daily[game.dateKey]}</b>`;
@@ -401,14 +416,15 @@ function resume() { closeOv("pause"); }
 $("gPause").onclick = pause;
 $("gRetry").onclick = () => {
   if (!game || overlays.length) return;
-  const keep = { ...game, ghost: game.trail.length ? game.trail : game.ghost };
+  const keep = { ...game, ghost: game.trail.length ? game.trail : game.ghost, keepMisses: true };
   loadGame(keep);
-  closeOv("brief"); game.mode = "aim";
   toastMsg("Fresh start", "");
 };
 $("pResume").onclick = resume;
 $("pRestart").onclick = () => { closeOv("pause"); $("gRetry").click(); };
-$("pSkip").onclick = () => {
+$("pShow").onclick = () => { closeOv("pause"); showLine(); };
+$("pSkip").onclick = async () => {
+  if (!(await confirmBox("Skip this hole?", "The next hole opens, but this one earns no stars until you come back and finish it.", "Skip"))) return;
   const g = game; closeOv("pause");
   save.skipHole(g.level.id);
   const ch = CHAPTERS[g.ci];
@@ -444,18 +460,22 @@ function computePreview() {
   // The preview covers a fixed distance, not a fixed time, so gentle shots are not left blind.
   const pts = [];
   let t = game.t, hit = null, dist = 0, acc2 = 0, px = s.x, py = s.y;
-  for (let k = 0; k < 720 && dist < game.previewLen; k++) {
+  // Each miss on this hole lengthens the preview, so help arrives for players who need it.
+  const maxLen = game.previewBase * (1 + 0.4 * Math.min(game.misses, 6));
+  let cap = maxLen;
+  for (let k = 0; k < 720 && dist < cap; k++) {
     t += PHYS.dt;
     const ev = step(game.world, s, t);
     const warped = s.events.length && s.events.includes("warp");
     s.events.length = 0;
     if (!warped) { const d = Math.hypot(s.x - px, s.y - py); dist += d; acc2 += d; }
     px = s.x; py = s.y;
+    if (warped && !game.guided) cap = Math.min(cap, dist + 130);      // only a glimpse past a wormhole
     if (acc2 >= 15 || warped) { pts.push(s.x, s.y); acc2 = 0; }
     if (ev) { hit = { ev, x: s.x, y: s.y }; break; }
   }
   game.world.at(game.t);
-  game.preview = { pts, hit };
+  game.preview = { pts, hit, label: game.guided || game.misses >= 3 };
 }
 
 function shoot(lv, demo = false) {
@@ -481,11 +501,12 @@ function shoot(lv, demo = false) {
 // A miss costs only the stroke already played; the ball comes back to where the shot started.
 // Only black holes add a penalty stroke.
 function miss(msg, kind) { penalty(msg, kind, false); }
+function offerHelp() { if (game.misses >= 3 || game.strokes >= game.level.par + 2) $("gShow").hidden = false; }
 function penalty(msg, kind, extra = true) {
   if (extra) { game.strokes++; updateStrokes(); game.penalized = true; }
   game.misses++;
   if (game.near && game.near.d < 400 && kind !== "swallowed") game.nearMark = { x: game.near.x, y: game.near.y };
-  if (game.misses >= 3) $("gShow").hidden = false;
+  offerHelp();
   toastMsg(msg, "bad");
   A.sfx(kind === "swallowed" ? "swallowed" : kind === "orbit" ? "orbit" : "lost");
   A.haptic(kind === "swallowed" ? "heavy" : "error");
@@ -532,7 +553,7 @@ function handleShotEvents(ball) {
   for (const ev of ball.events) {
     if (ev === "bounce") {
       A.sfx("bounce", { impact: ball.impact }); A.haptic(ball.impact > 250 ? "medium" : "light");
-      game.shotStats.bounces++;
+      if (ball.impact > 140) game.shotStats.bounces++;
       R.burst(ball.x, ball.y, { n: 6, speed: 60, color: "220,220,230", life: 0.4 });
       game.shotStats.asteroid = true;
       if (ball.impact > 300) R.kick(3);
@@ -596,14 +617,24 @@ function doomed(ball) {
 // "Show me a line": the game plays one hole-in-one from here as a demonstration. It is not counted.
 function showLine() {
   if (!game || game.mode !== "aim" || overlays.length) return;
-  let best = null;
-  for (let a = 0; a < 360; a += 1.5) for (let k = 2; k <= 14; k++) {
-    const p = k / 14, r = (a * Math.PI) / 180, vx = Math.cos(r) * p * PHYS.maxSpeed, vy = Math.sin(r) * p * PHYS.maxSpeed;
-    const res = simulate(game.world, game.rest, game.t, vx, vy);
-    if (res.ev === "holed" && (!best || res.t < best.t)) best = { vx, vy, t: res.t, power: p };
-  }
+  const search = (rest) => {
+    const hits = new Map();
+    for (let ai = 0; ai < 240; ai++) for (let k = 2; k <= 14; k++) {
+      const p = k / 14, r = (ai * 1.5 * Math.PI) / 180, vx = Math.cos(r) * p * PHYS.maxSpeed, vy = Math.sin(r) * p * PHYS.maxSpeed;
+      const res = simulate(game.world, rest, game.t, vx, vy);
+      if (res.ev === "holed") hits.set(ai * 100 + k, { vx, vy, t: res.t, power: p, ai, k });
+    }
+    let pick = null;
+    for (const h of hits.values()) {     // widest neighbourhood first, then the quickest
+      h.room = [-2, -1, 1, 2].filter((d) => hits.has(((h.ai + d + 240) % 240) * 100 + h.k)).length;
+      if (!pick || h.room > pick.room || (h.room === pick.room && h.t < pick.t)) pick = h;
+    }
+    return pick;
+  };
+  let best = search(game.rest);
+  if (!best && game.rest) { best = search(null); if (best) { game.rest = null; toastMsg("No line from there. Back to the tee", ""); } }
   game.world.at(game.t);
-  if (!best) { toastMsg("No single shot from here. Try landing closer", ""); return; }
+  if (!best) { toastMsg("No single-shot line right now. Try again in a moment", ""); return; }
   toastMsg("Watch this line", "good");
   shoot(best, true);
 }
@@ -653,13 +684,15 @@ function handleEnd(ev) {
     A.sfx("land"); A.haptic("light");
     R.burst(b.x, b.y, { n: 8, speed: 40, color: "200,220,255", life: 0.5 });
     if (body.type === "moon") award("moon");
-    toastMsg("Landed", "");
+    const fellBack = game.from && game.from.i === b.rest.i && game.flyTime < 2.2;
+    toastMsg(game.shotStats.lipped ? "Too fast for the cup. Landed" : fellBack ? "Gravity pulled it back. Pull harder to leave" : "Landed", game.shotStats.lipped || fellBack ? "bad" : "");
+    if (game.kind === "campaign" || game.strokes >= 2) offerHelp();
   } else if (ev === "swallowed") {
     R.spiral(b.x, b.y); R.kick(6);
     save.count("swallowed"); award("swallowed");
     penalty("Swallowed: +1 penalty", "swallowed");
   } else if (ev === "lost") miss(game.shotStats.lipped ? "Too fast for the cup. Pull back less" : game.near.d < 70 ? "So close. Ball recalled" : "Lost in space. Ball recalled", "lost");
-  else if (ev === "orbit") miss("Still drifting. Ball recalled", "orbit");
+  else if (ev === "orbit") miss(game.shotStats.lipped ? "Too fast for the cup. Ball recalled" : game.near.d < 70 ? "So close. Ball recalled" : "Still drifting. Ball recalled", "orbit");
 }
 
 // ---------------------------------------------------------------- results
@@ -696,6 +729,7 @@ function finishHole() {
   } else {
     if (save.count("freeplay") >= 10) award("free10");
   }
+  if (stars < 3) text += ` Three stars: ${par - 1 === 1 ? "a hole in one" : `${par - 1} strokes or fewer`}.`;
   game.chapterJustDone = chapterJustDone;
   game.stars = stars;
   checkNewSkins(skinsBefore);
@@ -718,7 +752,7 @@ function finishHole() {
     stars$.forEach((s, k) => { if (k < stars) setTimeout(() => { s.classList.add("on"); A.sfx("star", { i: k }); A.haptic("light"); }, 250 + k * 280); });
   }, 900);
 }
-$("rRetry").onclick = () => { closeOv("result"); loadGame({ ...game, ghost: game.allTrails.length ? game.allTrails[game.allTrails.length - 1] : game.ghost }); closeOv("brief"); game.mode = "aim"; };
+$("rRetry").onclick = () => { closeOv("result"); loadGame({ ...game, keepMisses: true, misses: 0, ghost: game.allTrails.length ? game.allTrails[game.allTrails.length - 1] : game.ghost }); game.misses = 0; };
 $("rShare").onclick = async () => {
   const g = game;
   const order = ["Ace", "Slingshot", "Wormhole", "Close call", "Bank shot", "Bumper", "Nebula brake", "Long haul", "Comeback"];
@@ -843,7 +877,7 @@ function layoutRenderer() {
   const bottom = hb.offsetParent && !$("gHint").hidden ? window.innerHeight - hb.getBoundingClientRect().top : 0;
   R.resize({ top: hud.bottom, bottom: Math.max(bottom, 8) });
 }
-window.addEventListener("resize", () => { layoutRenderer(); });
+window.addEventListener("resize", () => { if (game) { game.aim = null; game.preview = null; } layoutRenderer(); });
 window.addEventListener("orientationchange", () => setTimeout(layoutRenderer, 200));
 
 // ---------------------------------------------------------------- lifecycle

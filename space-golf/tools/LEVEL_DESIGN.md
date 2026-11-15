@@ -69,3 +69,20 @@ Design rules that came out of it:
 5. **Intro holes are gentle**: the obvious, safe route must work; the risky route is the bonus.
 6. **Par should mean something.** If a naive first shot aces a hole, it is par 2, or it needs an obstacle.
 7. Labels and names must match what the player sees (nothing called "hidden" that is in plain view).
+
+## Lessons from playtest round 2 (the round-1 fixes overshot: now too easy)
+Fresh testers on the revised game: Chapter 1 in 10 strokes with 27/27 stars; Chapter 3 in 14 strokes against par 23; Chapter 4 with 8 of 9 holes in one. "The first shot I thought of won on 7 of 9 holes." "The new mechanics rarely matter." "Scenery that does nothing." The holes must make the player think, without going back to round 1's unfairness.
+
+The engine is changing again alongside your work:
+- The preview now shows only about half the route (roughly 500-700 units; full length only on c1h1-c1h3), stops about 120 units after a wormhole exit, and no longer says GOES IN except on those tutorial holes. It grows by 40% with each miss on a hole, so strugglers still get help. Misses still cost no penalty.
+
+Rules for this pass (in addition to round 1's: truthful hints, lay-ups, no hazard stealing putts at the cup):
+1. **The naive shot must not win.** The solver now prints `direct`: the widest hole-in-one window within 8 degrees of the straight tee-to-cup line. Outside c1h1/c1h2 it should be 0-1.5 degrees. Block the straight line with the hole's featured body.
+2. **The featured mechanic must be required** for the best route: the pulsar has to be timed, the sun gap read, the moon waited for, the wormhole entered on a curved approach (not on a straight unobstructed line from the tee, and its exit should not point straight at the cup unless reaching the mouth is itself the puzzle), the nebula used to brake. Verify with a script (count warp events, compare aces at different launch times, etc.).
+3. **Aim window 3.5-7 degrees** for the intended route (c1: 5-8). Not 10+. Ace rate roughly 0.4-1.3%. Keep `lands` at 6% or more so misses stay playable, and keep `worst` at 2.5 or more on moving holes.
+4. **Par is honest.** Three stars = par - 1 strokes. A hole whose idea is one clever shot is par 2 (three stars = the ace). Par 3 is for holes that really need a landing and a second shot from most positions. Finale: par 3 or 4 only if it truly takes that.
+5. **Hints name the idea, not the move.** "The ring pushes back. Where is it open?" not "shoot away from the cup with plenty of power".
+6. **Every body has a job** (blocker, lay-up, backstop, bender, timing gate). Remove decoration.
+7. **Vary the solutions.** Within a chapter the winning shots should not all be the same direction and power from the tee; move tees and cups around the course.
+8. A planet next to the cup (within ~120 of the cup) makes tap-ins fall back onto it: avoid resting spots closer than 150 to the cup, or make sure a 30-45% shot from there drops.
+9. Physics changed again for this pass: the cup now pulls slow balls in from the green (holeMu 300000, capture speed 300) and a ball still flying after 9 s is recalled (was 11). Re-verify everything; long crawling aces (8 s+) are gone.

@@ -276,3 +276,19 @@ button.icon { width: 44px; height: 44px; padding: 0; font-size: 22px; line-heigh
   #ov-brief, #ov-result, #ov-pause, #ov-story { align-items: flex-end; padding-bottom: calc(var(--safe-b) + 28px); }
 }
 @media (max-height: 520px) { .toast { bottom: calc(var(--safe-b) + 64px); } .ach-toast { bottom: calc(var(--safe-b) + 112px); } }
+
+/* ---------- v1.3: playtest round 2 ---------- */
+:root { --panel: #0e142c; }
+.has-ov .hud-bottom, .has-ov .reset-ball { visibility: hidden; }
+.toast { font-family: var(--mono); font-weight: 600; font-size: 14px; }
+.ach-toast { bottom: auto; top: calc(var(--safe-t) + 10px); }
+.keyline { color: var(--dim); font-size: 12.5px; }
+.hole-tile { aspect-ratio: auto; min-height: 112px; gap: 6px; justify-content: flex-start; }
+.hole-tile .nm { flex: 1; }
+.hole-tile .st { line-height: 1; }
+.bar .eyebrow { white-space: normal; font-size: 10px; letter-spacing: 0.08em; }
+@media (min-aspect-ratio: 1/1) {
+  .hole-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); max-width: 820px; }
+  .hole-tile { min-height: 96px; }
+  .chapter-list { grid-template-columns: 1fr 1fr; max-width: 900px; }
+}

@@ -181,13 +181,14 @@ export class Renderer {
     // field rings
     for (let i = 0; i < B.length; i++) {
       const b = B[i];
-      if (!b.mu || b.type === "cloud" || !W.on[i]) continue;
+      if (!b.mu || b.type === "cloud") continue;
+      const quiet = !W.on[i];
       const col = b.mu < 0 ? "255,120,110" : b.type === "pulsar" ? "150,210,255" : b.type === "blackhole" ? "255,190,140" : "170,190,255";
       let k = 0;
       for (const a of [520, 200, 80]) {
         const r = Math.sqrt(Math.abs(b.mu) / a);
         if (r > b.r + 6 && r < 520) {
-          ctx.strokeStyle = `rgba(${col},${0.3 - k * 0.085})`; ctx.lineWidth = 1.2 * px;
+          ctx.strokeStyle = `rgba(${col},${(0.3 - k * 0.085) * (quiet ? 0.35 : 1)})`; ctx.lineWidth = 1.2 * px;
           ctx.setLineDash([5 * px, 7 * px]);
           ctx.beginPath(); ctx.arc(W.x[i], W.y[i], r, 0, 6.283); ctx.stroke();
         }
@@ -290,7 +291,15 @@ export class Renderer {
     this.screenTransform();
     if (st.labelAlpha > 0.01) { ctx.globalAlpha = st.labelAlpha; this.labels(W); ctx.globalAlpha = 1; }
     this.pulsarTimers(W, t);
-    if (pv && pv.hit && pv.hit.ev === "holed") {
+    if (pv && pv.hit && pv.hit.ev === "rest") {
+      const s3 = this.w2s(pv.hit.x, pv.hit.y);
+      ctx.font = "600 10px 'IBM Plex Mono', monospace"; ctx.textAlign = "center"; ctx.fillStyle = "#6fe0d2"; ctx.fillText("LANDS", s3.x, s3.y - 14);
+    }
+    if (st.nearMark) {
+      const s4 = this.w2s(st.nearMark.x, st.nearMark.y);
+      ctx.font = "600 10px 'IBM Plex Mono', monospace"; ctx.textAlign = "center"; ctx.fillStyle = "rgba(255,140,130,0.95)"; ctx.fillText("LAST MISS", s4.x, s4.y - 12);
+    }
+    if (pv && pv.label && pv.hit && pv.hit.ev === "holed") {
       const s2 = this.w2s(this.level.hole.x, this.level.hole.y);
       ctx.font = "800 18px Syne, sans-serif"; ctx.textAlign = "center";
       ctx.lineWidth = 4; ctx.strokeStyle = "rgba(6,9,22,0.9)"; ctx.strokeText("GOES IN", s2.x, s2.y + 48);
@@ -551,7 +560,9 @@ export class Renderer {
     ctx.strokeStyle = aim.power > 0.85 ? "#ff6b6b" : "#ffc94d";
     ctx.beginPath(); ctx.arc(s.x, s.y, r, -Math.PI / 2, -Math.PI / 2 + 6.283 * aim.power); ctx.stroke();
     ctx.fillStyle = "#e6ebf7"; ctx.font = "600 12px 'IBM Plex Mono', monospace"; ctx.textAlign = "center";
-    ctx.fillText(Math.round(aim.power * 100) + "%", s.x, s.y - r - 8);
+    const side = s.x > this.W - 90 ? -1 : 1;
+    ctx.textAlign = side > 0 ? "left" : "right";
+    ctx.fillText(Math.round(aim.power * 100) + "%", s.x + side * (r + 8), s.y + r + 4);
   }
 }
 
